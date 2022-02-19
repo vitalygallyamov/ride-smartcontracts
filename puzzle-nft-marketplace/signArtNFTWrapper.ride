@@ -1,0 +1,77 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let nftCreationAddress = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let signArtContractAddress = base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV'
+
+func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
+  asset.issuer.bytes == issuerAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+@Callable(i)
+func lockSignArt() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].value().assetId.value()
+
+  let asset = assetInfo(assetId).value()
+  let assetDesc = asset.description
+
+  if (i.payments[0].value().amount == 1 && asset.checkNFT(signArtContractAddress)) then {
+    # Parsing a string by pattern 
+    # Creator: (creatorStr), ArtID: (artIdStr), SignID: (signIdStr), Artwork name: (artWorkName), Issue: (issueStr)
+    # But if the string changes, everything breaks
+    let partsOfString = assetDesc.split(",")
+    let creatorStr = partsOfString[0].split(":")[1].drop(1)
+    let artIdStr = partsOfString[1].split(":")[1].drop(1)
+    #let artWorkName = partsOfString[2].split(":")[1].drop(1)
+
+    let name = getStringValue(Address(signArtContractAddress), "art_name_" + artIdStr + "_" + creatorStr)
+    let artDesc = getStringValue(Address(signArtContractAddress), "art_desc_" + artIdStr + "_" + creatorStr)
+    let artUrl = getStringValue(Address(signArtContractAddress), "art_display_cid_" + artIdStr + "_" + creatorStr)
+
+    let desc = if (artDesc.size() > 0) then artDesc else "NFT from signArt"
+    let imageLink = "https://ipfs.io/ipfs/" + artUrl
+
+    strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name, desc, imageLink, "signArt"], [])) {
+      case x: String => x
+      case _ => throw("something went wrong during creation of NFT")
+    }
+
+    [
+      ScriptTransfer(i.caller, 1, stakedNFTIdStr.fromBase58String()),
+
+      StringEntry("signArtNft_" + assetId.toBase58String() + "_owner", addressStr),
+      StringEntry("signArtNft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
+    ]
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
+func unlockSignArt() = {
+  let addressStr = i.caller.toString()
+  let stakedNFTId = i.payments[0].value().assetId.value()
+
+  let stakedNFTAsset = assetInfo(stakedNFTId).value()
+
+  if (i.payments[0].value().amount == 1 || stakedNFTAsset.checkNFT(nftCreationAddress)) then {
+    let stakedNFTIdStr = stakedNFTAsset.id.toBase58String()
+    let assetIdStr = getStringValue("signArtNft_" + stakedNFTIdStr + "_assetId")
+    let ownerStr = getStringValue("signArtNft_" + assetIdStr + "_owner")
+    let assetId = assetIdStr.fromBase58String()
+
+    if (ownerStr.size() > 0 && ownerStr == addressStr) then {
+      [
+        ScriptTransfer(i.caller, 1, assetId),
+        Burn(stakedNFTId, 1),
+
+        DeleteEntry("signArtNft_" + stakedNFTIdStr + "_assetId"),
+        DeleteEntry("signArtNft_" + assetIdStr + "_owner")
+      ]
+    } else throw("This NFT is not yours")
+  } else throw("Ivalid NFT attached")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
