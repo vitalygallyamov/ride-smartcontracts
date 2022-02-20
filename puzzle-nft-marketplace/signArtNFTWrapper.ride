@@ -33,17 +33,19 @@ func lockSignArt() = {
     let desc = if (artDesc.size() > 0) then artDesc else "NFT from signArt"
     let imageLink = "https://ipfs.io/ipfs/" + artUrl
 
-    strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name, desc, imageLink, "signArt"], [])) {
-      case x: String => x
-      case _ => throw("something went wrong during creation of NFT")
-    }
+    if (name.size() > 0 && artUrl.size() > 0) then {
+      strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.take(16), desc, imageLink, "signArt"], [])) {
+        case x: String => x
+        case _ => throw("something went wrong during creation of NFT")
+      }
 
-    [
-      ScriptTransfer(i.caller, 1, stakedNFTIdStr.fromBase58String()),
+      [
+        ScriptTransfer(i.caller, 1, stakedNFTIdStr.fromBase58String()),
 
-      StringEntry("signArtNft_" + assetId.toBase58String() + "_owner", addressStr),
-      StringEntry("signArtNft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
-    ]
+        StringEntry("signArtNft_" + assetId.toBase58String() + "_owner", addressStr),
+        StringEntry("signArtNft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
+      ]
+    } else throw("Wrong data for create NFT")
   }
   else throw("Ivalid NFT attached")
 }
