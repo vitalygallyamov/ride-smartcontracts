@@ -1,0 +1,96 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let nftCreationAddress = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let signArtNftCreationAddress = base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV'
+
+# wrapper contracts
+let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
+let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
+
+# ducks contracts for create nft
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+
+let marketplaceContractAddress = base58'3PATXDVE53rKJtkwXYV3tvuLVS2fDtGtKCc'
+
+# check signArt NFT
+func ifSignArtNft(asset: Asset) = {
+  asset.issuer.bytes == signArtNftCreationAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+# check duck NFT
+func ifDuckNft(asset: Asset) = {
+  (asset.issuer.bytes == incubatorAddress || asset.issuer.bytes == breederAddress)
+  && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+# check marketplace NFT
+func isNftFromMarketplace(asset: Asset) = {
+  asset.issuer.bytes == nftCreationAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+# choose wrap address by nft type
+func getAddressForWrap(asset: Asset) = {
+  if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
+  else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
+  else throw("Unsupported NFT attached")
+}
+
+@Callable(i)
+func lockAndSellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
+
+  let assetId = i.payments[0].value().assetId.value()
+  let asset = assetInfo(assetId).value()
+
+  let wrapAddress = asset.getAddressForWrap()
+
+  strict stakedNFTIdStr = match invoke(wrapAddress, "lock", [], [i.payments[0]]) {
+    case s:String => s
+    case _ => throw("Somthing wrong when lock NFT in address: " + wrapAddress.bytes.toBase58String())
+  }
+
+  if (stakedNFTIdStr.size() > 0) then {
+    strict inv = invoke(Address(marketplaceContractAddress), "sellNFT",
+      [buyOutPrice, buyOutAssetId],
+      [AttachedPayment(stakedNFTIdStr.fromBase58String(), 1)])
+    [
+      StringEntry("nft_" + assetId.toBase58String() + "_owner", i.caller.toString()),
+      StringEntry("nft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
+    ]
+  } else throw("The created NFT is invalid")
+}
+
+@Callable(i)
+func cancelSellAndUnlock(nftId: String) = {
+
+  let asset = assetInfo(nftId.fromBase58String()).value()
+
+  let originalAssetId = getStringValue(this, "nft_" + nftId + "_assetId")
+  let ownerStr = getStringValue(this, "nft_" + originalAssetId + "_owner")
+
+  if (originalAssetId.size() > 0 && ownerStr.size() > 0 && i.caller.toString() == ownerStr && asset.isNftFromMarketplace()) then {
+
+    strict inv1 = invoke(Address(marketplaceContractAddress), "cancelSell", [nftId], [])
+
+    let canceledAsset = assetInfo(originalAssetId.fromBase58String()).value()
+    let wrapAddress = canceledAsset.getAddressForWrap()
+
+    strict unlockedNftStr = match invoke(wrapAddress, "unlock", [], [AttachedPayment(asset.id, 1)]) {
+      case s:String => s
+      case _ => throw("Somthing wrong when unlock NFT in address: " + wrapAddress.bytes.toBase58String())
+    }
+
+    [
+      ScriptTransfer(i.caller, 1, unlockedNftStr.fromBase58String()),
+
+      DeleteEntry("nft_" + originalAssetId + "_owner"),
+      DeleteEntry("nft_" + nftId + "_assetId")
+    ]
+
+  } else throw("Ivalid NFT attached")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)

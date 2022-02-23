@@ -10,7 +10,7 @@ func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
 }
 
 @Callable(i)
-func lockSignArt() = {
+func lock() = {
   let addressStr = i.caller.toString()
   let assetId = i.payments[0].value().assetId.value()
 
@@ -36,22 +36,25 @@ func lockSignArt() = {
     if (name.size() > 0 && artUrl.size() > 0) then {
       strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.take(16), desc, imageLink, "signArt"], [])) {
         case x: String => x
-        case _ => throw("something went wrong during creation of NFT")
+        case _ => throw("Something went wrong during creation of NFT")
       }
 
-      [
-        ScriptTransfer(i.caller, 1, stakedNFTIdStr.fromBase58String()),
+      (
+        [
+          ScriptTransfer(i.caller, 1, stakedNFTIdStr.fromBase58String()),
 
-        StringEntry("signArtNft_" + assetId.toBase58String() + "_owner", addressStr),
-        StringEntry("signArtNft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
-      ]
+          StringEntry("signArtNft_" + assetId.toBase58String() + "_owner", addressStr),
+          StringEntry("signArtNft_" + stakedNFTIdStr + "_assetId", assetId.toBase58String())
+        ],
+        stakedNFTIdStr
+      )
     } else throw("Wrong data for create NFT")
   }
   else throw("Ivalid NFT attached")
 }
 
 @Callable(i)
-func unlockSignArt() = {
+func unlock() = {
   let addressStr = i.caller.toString()
   let stakedNFTId = i.payments[0].value().assetId.value()
 
@@ -64,13 +67,13 @@ func unlockSignArt() = {
     let assetId = assetIdStr.fromBase58String()
 
     if (ownerStr.size() > 0 && ownerStr == addressStr) then {
-      [
+      ([
         ScriptTransfer(i.caller, 1, assetId),
         Burn(stakedNFTId, 1),
 
         DeleteEntry("signArtNft_" + stakedNFTIdStr + "_assetId"),
         DeleteEntry("signArtNft_" + assetIdStr + "_owner")
-      ]
+      ], assetIdStr)
     } else throw("This NFT is not yours")
   } else throw("Ivalid NFT attached")
 }
