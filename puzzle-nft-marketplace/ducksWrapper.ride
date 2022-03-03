@@ -123,7 +123,7 @@ func unlock() = {
   if (tryGetString("duck_" + assetIdStr + "_owner") != addressStr) then {throw("duck is not yours")} 
   else {
     strict assetBalanceBefore = assetBalance(this, eggAssetId)
-    strict inv1 = invoke(Address(farmingAddress), "unstakeNFT", [assetIdStr], [])  # TODO: jackpot unstaking
+    strict inv1 = if (assetBalance(this, assetId) > 0) then {unit} else {invoke(Address(farmingAddress), "unstakeNFT", [assetIdStr], [])}  # TODO: jackpot unstaking
     strict eggEarned = assetBalance(this, eggAssetId) - assetBalanceBefore
 
     ([
