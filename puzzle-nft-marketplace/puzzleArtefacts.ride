@@ -15,27 +15,27 @@ let artefacts = [
   [
     "Puzzle Surf",
     "Puzzle Surf artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
-    "http://ipfs.io/ipfs/QmUawQhPVhPitBSRtgd6ZKurseYJ3QWYUhYmV23PS2qL4Y"
+    "https://ipfs.io/ipfs/QmUawQhPVhPitBSRtgd6ZKurseYJ3QWYUhYmV23PS2qL4Y"
   ],
   [
     "Puzzle Desert",
     "Puzzle Desert artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
-    "http://ipfs.io/ipfs/Qma7Beh9pPkRhgK6WNMQKLHahQDKeKRp5myjv2mx1zv1zm"
+    "https://ipfs.io/ipfs/Qma7Beh9pPkRhgK6WNMQKLHahQDKeKRp5myjv2mx1zv1zm"
   ],
   [
     "Puzzle Airplane",
     "Puzzle Airplane artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
-    "http://ipfs.io/ipfs/QmNTzzdvBx658hiCVvHNGS4FsRk8ZhAgYwezH6Q9QEKy7K"
+    "https://ipfs.io/ipfs/QmNTzzdvBx658hiCVvHNGS4FsRk8ZhAgYwezH6Q9QEKy7K"
   ],
   [
     "Puzzle Wheel",
     "Puzzle Wheel artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
-    "http://ipfs.io/ipfs/QmTvN5sAC2ka4qtLjSd2vWQ4NqYJD8Qo8cJiChd8QjYNC5"
+    "https://ipfs.io/ipfs/QmTvN5sAC2ka4qtLjSd2vWQ4NqYJD8Qo8cJiChd8QjYNC5"
   ],
   [
     "Puzzle Khalifa",
     "Puzzle Khalifa artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
-    "http://ipfs.io/ipfs/QmckDMscnuYp8shr3NxqbeDJ82V6c1UvWP1ecPAfMkSv2D"
+    "https://ipfs.io/ipfs/QmckDMscnuYp8shr3NxqbeDJ82V6c1UvWP1ecPAfMkSv2D"
   ]
 ]
 
@@ -59,7 +59,8 @@ func getIntegerData(key: String) = {
 
 # check NFT asset
 func isValidNFT(asset: Asset) = {
-  asset.issuer == this && asset.decimals == 0 && asset.quantity == 1
+  let issuerAddress = getString(Address(nftCreationAddress), "nft_" + asset.id.toBase58String() + "_issuer")
+  asset.issuer == Address(nftCreationAddress) && issuerAddress == this.toString() && asset.decimals == 0 && asset.quantity == 1
 }
 
 # check eagle holder by address
@@ -86,15 +87,16 @@ func getArtefactUsdnPrice() = {
 
 # calculate delta between user payment and price 1 artefact
 func deltaUsdnSum(puzzleAmount: Int, puzzlePriceUsdn: Int, isEagleHolder: Boolean) = {
-  let usdnSum = if(isEagleHolder) then {
-    let sum = fraction(puzzlePriceUsdn, puzzleAmount, 1_0000_0000)
+  let usdnSum = fraction(puzzlePriceUsdn, puzzleAmount, 1_0000_0000)
+  let artefactUsdnPrice = if(isEagleHolder) then {
+    let price = getArtefactUsdnPrice()
     # 20% sale for eagle holder
-    sum - fraction(sum, 20, 100)
+    price - fraction(price, 20, 100)
   } else {
-    fraction(puzzlePriceUsdn, puzzleAmount, 1_0000_0000)
+    getArtefactUsdnPrice()
   }
 
-  usdnSum - getArtefactUsdnPrice()
+  usdnSum - artefactUsdnPrice
 }
 
 @Callable(i)
@@ -108,7 +110,7 @@ func generateArtefact() = {
 
       # 2. create artefact NFT
       let randIndex = getRandomNumber(5, i.transactionId, height, 0)
-      if (randIndex > 0 && randIndex < 5) then {
+      if (randIndex >= 0 && randIndex < 5) then {
         let artefact = artefacts[randIndex]
 
         strict createdNFTStr = match (invoke(Address(nftCreationAddress), "createNFT", [artefact[0], artefact[1], artefact[2], "Puzzle Pool Artefact"], [])) {
@@ -148,7 +150,7 @@ func spendArtefact() = {
       let soldCountKey = i.caller.toString() + "_sold_count";
       let addressSoldKey = i.caller.toString() + "_address_spend";
 
-      strict createNFTStr = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
+      strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
       [
         StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
         IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
@@ -159,3 +161,4 @@ func spendArtefact() = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
