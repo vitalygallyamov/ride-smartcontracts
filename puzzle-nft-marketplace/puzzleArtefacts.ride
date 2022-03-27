@@ -1,0 +1,161 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+# constants
+let puzzleAssetId = base58'HEB8Qaw9xrWpWs8tHsiATYGBWDBtP2S7kcPALrMu43AS'
+let usdnAssetId = base58'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p'
+
+let puzzlePoolAddress = base58'3PFDgzu1UtswAkCMxqqQjbTeHaX4cMab8Kh'
+let nftCreationAddress = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
+let eagleHolderAddress = base58'3PKUxbZaSYfsR7wu2HaAgiirHYwAMupDrYW'
+
+# array of allow artefacts [name, description, imageUrl]
+let artefacts = [
+  [
+    "Puzzle Surf",
+    "Puzzle Surf artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
+    "http://ipfs.io/ipfs/QmUawQhPVhPitBSRtgd6ZKurseYJ3QWYUhYmV23PS2qL4Y"
+  ],
+  [
+    "Puzzle Desert",
+    "Puzzle Desert artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
+    "http://ipfs.io/ipfs/Qma7Beh9pPkRhgK6WNMQKLHahQDKeKRp5myjv2mx1zv1zm"
+  ],
+  [
+    "Puzzle Airplane",
+    "Puzzle Airplane artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
+    "http://ipfs.io/ipfs/QmNTzzdvBx658hiCVvHNGS4FsRk8ZhAgYwezH6Q9QEKy7K"
+  ],
+  [
+    "Puzzle Wheel",
+    "Puzzle Wheel artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
+    "http://ipfs.io/ipfs/QmTvN5sAC2ka4qtLjSd2vWQ4NqYJD8Qo8cJiChd8QjYNC5"
+  ],
+  [
+    "Puzzle Khalifa",
+    "Puzzle Khalifa artefact can be used to launch a custom pool on Puzzle Swap (PuzzleSwap.org).",
+    "http://ipfs.io/ipfs/QmckDMscnuYp8shr3NxqbeDJ82V6c1UvWP1ecPAfMkSv2D"
+  ]
+]
+
+let totalCount_DataKey = "total_sold_nft"
+
+# functions
+# for generation random digit
+func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset*8) % variants
+}
+
+# get integer data by key
+func getIntegerData(key: String) = {
+  match (getInteger(this, key)) {
+      case t:Int => t
+      case _ => 0
+    }
+}
+
+# check NFT asset
+func isValidNFT(asset: Asset) = {
+  asset.issuer == this && asset.decimals == 0 && asset.quantity == 1
+}
+
+# check eagle holder by address
+func isEagleHolder(address: String) = {
+  match (getInteger(Address(eagleHolderAddress), address + "_staked")) {
+      case t:Int => t > 0
+      case _ => false
+    }
+}
+
+# get puzzle USDN price
+func getPuzzlePrice() = {
+  let usdnBalance = getIntegerValue(Address(puzzlePoolAddress), "global_" + usdnAssetId.toBase58String() + "_balance")
+  let puzzleBalance = getIntegerValue(Address(puzzlePoolAddress), "global_" + puzzleAssetId.toBase58String() +"_balance")
+
+  let puzzlePart = fraction(puzzleBalance, 1, 8)
+  fraction(usdnBalance, 1_000_000, fraction(puzzlePart, 1, 100))
+}
+
+# artefact price = 400 USDN + (total sold nft * 1 USDN)
+func getArtefactUsdnPrice() = {
+  400_000_000 + (getIntegerData(totalCount_DataKey) * 1_000_000)
+}
+
+# calculate delta between user payment and price 1 artefact
+func deltaUsdnSum(puzzleAmount: Int, puzzlePriceUsdn: Int, isEagleHolder: Boolean) = {
+  let usdnSum = if(isEagleHolder) then {
+    let sum = fraction(puzzlePriceUsdn, puzzleAmount, 1_0000_0000)
+    # 20% sale for eagle holder
+    sum - fraction(sum, 20, 100)
+  } else {
+    fraction(puzzlePriceUsdn, puzzleAmount, 1_0000_0000)
+  }
+
+  usdnSum - getArtefactUsdnPrice()
+}
+
+@Callable(i)
+func generateArtefact() = {
+  if (i.payments.size() == 1 && i.payments[0].assetId == puzzleAssetId && i.payments[0].amount > 0) then {
+
+    # 1. calculate price payment and check it
+    let puzzlePriceUsdn = getPuzzlePrice()
+    let paymentUsdnDelta = deltaUsdnSum(i.payments[0].amount, puzzlePriceUsdn, isEagleHolder(i.caller.toString()))
+    if (paymentUsdnDelta >= 0) then {
+
+      # 2. create artefact NFT
+      let randIndex = getRandomNumber(5, i.transactionId, height, 0)
+      if (randIndex > 0 && randIndex < 5) then {
+        let artefact = artefacts[randIndex]
+
+        strict createdNFTStr = match (invoke(Address(nftCreationAddress), "createNFT", [artefact[0], artefact[1], artefact[2], "Puzzle Pool Artefact"], [])) {
+          case x: String => x
+          case _ => throw("something went wrong during creation of NFT")
+        }
+
+        # calculate how many puzzles we need to return to the user
+        let extraTransactionList = if (paymentUsdnDelta > 0) then {
+          let returnPuzzleAmount = fraction(paymentUsdnDelta, 1_0000_0000, puzzlePriceUsdn)
+          [
+            ScriptTransfer(i.caller, returnPuzzleAmount, puzzleAssetId),
+            Burn(puzzleAssetId, i.payments[0].amount - returnPuzzleAmount)
+          ]
+        } else {
+          [
+            Burn(puzzleAssetId, i.payments[0].amount)
+          ]
+        }
+
+        # 3. send NFT and burn puzzle
+        ([
+          ScriptTransfer(i.caller, 1, fromBase58String(createdNFTStr)),
+          IntegerEntry(totalCount_DataKey, getIntegerData(totalCount_DataKey) + 1)
+        ] ++ extraTransactionList, createdNFTStr)
+
+      } else throw("Inalid random index.")
+    } else throw("Not enough payment amount.")
+  } else throw("Invalid payment. You can use only Puzzle for payment.")
+}
+
+@Callable(i)
+func spendArtefact() = {
+  if (i.payments.size() == 1 && i.payments[0].amount == 1) then {
+    let nftAsset = assetInfo(i.payments[0].assetId.value()).value()
+    if (isValidNFT(nftAsset)) then {
+      let soldCountKey = i.caller.toString() + "_sold_count";
+      let addressSoldKey = i.caller.toString() + "_address_spend";
+
+      strict createNFTStr = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
+      [
+        StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
+        IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
+      ]
+    } else throw("Invalid NFT.")
+  } else throw("Invalid payment. You should use NFT for payment.")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
