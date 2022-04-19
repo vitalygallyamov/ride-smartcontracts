@@ -71,8 +71,9 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
           IntegerEntry("nft_" + assetNameStr + "_buyOutPrice", buyOutPrice),
           StringEntry("nft_" + assetNameStr + "_buyOutAssetId", buyOutAsset.getAssetString()),
           StringEntry("nft_" + assetNameStr + "_royaltyReceiver", royaltyReceiver),
-          StringEntry("nft_" + assetNameStr + "_seller", i.caller.toString()),
-          IntegerEntry("address_" + i.caller.toString() + "_nft_" + assetNameStr + "_startSaleAt", height)
+          StringEntry("nft_" + assetNameStr + "_seller", i.originCaller.toString()),
+          StringEntry("address_" + i.originCaller.toString() + "_nft", assetNameStr),
+          IntegerEntry("address_" + i.originCaller.toString() + "_nft_" + assetNameStr + "_startSaleAt", height)
         ]
 
       } else throw("Price must be greater than zero")
@@ -109,6 +110,7 @@ func buyNFT(nftId: String) = {
         DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
         DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
         DeleteEntry("nft_" + nftId + "_seller"),
+        DeleteEntry("address_" + sellerStr + "_nft"),
         DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
       ], nftAsset.id.toBase58String())
     } else throw("The buyout asset does not match the purchase asset")
@@ -121,16 +123,17 @@ func cancelSell(nftId: String) = {
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
 
-  if (size(sellerStr) > 0 && sellerStr == i.caller.toString()) then {
-    [
+  if (size(sellerStr) > 0 && sellerStr == i.originCaller.toString()) then {
+    ([
       ScriptTransfer(i.caller, 1, nftAsset.id),
 
       DeleteEntry("nft_" + nftId + "_buyOutPrice"),
       DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
       DeleteEntry("nft_" + nftId + "_seller"),
+      DeleteEntry("address_" + sellerStr + "_nft"),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
-    ]
+    ], nftId)
   } else throw("You are not a seller")
 }
 
