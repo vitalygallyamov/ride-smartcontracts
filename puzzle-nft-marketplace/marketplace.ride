@@ -2,13 +2,12 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let USDN = base58'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p'
-let issuerNftDapp = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 
 let royaltyPercent = 10
 
 func checkNFT(asset: Asset) = {
-  asset.issuer.bytes == issuerNftDapp && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+  asset.issuer.bytes == createNftDapp && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
 func tryGetInteger(key: String) = {
@@ -63,7 +62,7 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
       if (buyOutPrice > 0) then {
 
         let assetNameStr = toBase58String(nft.id)
-        let royaltyReceiver = match getString(Address(issuerNftDapp), "nft_" + assetNameStr + "_issuer") {
+        let royaltyReceiver = match getString(Address(createNftDapp), "nft_" + assetNameStr + "_issuer") {
           case a: String => a
           case _ => i.caller.toString()
         }
@@ -72,7 +71,7 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
           IntegerEntry("nft_" + assetNameStr + "_buyOutPrice", buyOutPrice),
           StringEntry("nft_" + assetNameStr + "_buyOutAssetId", buyOutAsset.getAssetString()),
           StringEntry("nft_" + assetNameStr + "_royaltyReceiver", royaltyReceiver),
-          StringEntry("nft_" + assetNameStr + "_owner", i.caller.toString()),
+          StringEntry("nft_" + assetNameStr + "_seller", i.caller.toString()),
           IntegerEntry("address_" + i.caller.toString() + "_nft_" + assetNameStr + "_startSaleAt", height)
         ]
 
@@ -90,7 +89,7 @@ func buyNFT(nftId: String) = {
   let buyOutPrice = tryGetInteger("nft_" + nftId + "_buyOutPrice")
   let buyOutAssetId = tryGetString("nft_" + nftId + "_buyOutAssetId")
   let royaltyReceiver = tryGetString("nft_" + nftId + "_royaltyReceiver")
-  let ownerStr = tryGetString("nft_" + nftId + "_owner")
+  let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   let buyOutAsset = tryGetAssetInfo(buyOutAssetId, "Buyout asset not found")
@@ -101,38 +100,38 @@ func buyNFT(nftId: String) = {
     let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
 
     if (pmt.assetId == buyOutAsset.id) then {
-      [
+      ([
         ScriptTransfer(i.caller, 1, nftAsset.id),
-        ScriptTransfer(Address(ownerStr.fromBase58String()), buyOutPrice - royaltyPart, buyOutAsset.id),
+        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart, buyOutAsset.id),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAsset.id),
 
         DeleteEntry("nft_" + nftId + "_buyOutPrice"),
         DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
         DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
-        DeleteEntry("nft_" + nftId + "_owner"),
-        DeleteEntry("address_" + ownerStr + "_nft_" + nftId + "_startSaleAt")
-      ]
+        DeleteEntry("nft_" + nftId + "_seller"),
+        DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
+      ], nftAsset.id.toBase58String())
     } else throw("The buyout asset does not match the purchase asset")
   } else throw("Payment amount must be greater than zero")
 }
 
 @Callable(i)
 func cancelSell(nftId: String) = {
-  let ownerStr = tryGetString("nft_" + nftId + "_owner")
+  let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
 
-  if (size(ownerStr) > 0 && ownerStr == i.caller.toString()) then {
+  if (size(sellerStr) > 0 && sellerStr == i.caller.toString()) then {
     [
       ScriptTransfer(i.caller, 1, nftAsset.id),
 
       DeleteEntry("nft_" + nftId + "_buyOutPrice"),
       DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
-      DeleteEntry("nft_" + nftId + "_owner"),
-      DeleteEntry("address_" + ownerStr + "_nft_" + nftId + "_startSaleAt")
+      DeleteEntry("nft_" + nftId + "_seller"),
+      DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
     ]
-  } else throw("You are not owner")
+  } else throw("You are not a seller")
 }
 
 @Verifier(tx)

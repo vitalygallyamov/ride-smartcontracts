@@ -2,7 +2,7 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let nftCreationAddress = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let nftCreationAddress = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 let signArtContractAddress = base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV'
 
 func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
@@ -60,16 +60,17 @@ func unlock() = {
 
   let stakedNFTAsset = assetInfo(stakedNFTId).value()
 
-  if (i.payments[0].value().amount == 1 || stakedNFTAsset.checkNFT(nftCreationAddress)) then {
+  if (i.payments[0].value().amount == 1 && stakedNFTAsset.checkNFT(nftCreationAddress)) then {
     let stakedNFTIdStr = stakedNFTAsset.id.toBase58String()
     let assetIdStr = getStringValue("signArtNft_" + stakedNFTIdStr + "_assetId")
     let ownerStr = getStringValue("signArtNft_" + assetIdStr + "_owner")
     let assetId = assetIdStr.fromBase58String()
 
+    strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], [AttachedPayment(stakedNFTAsset.id, 1)])
+
     if (ownerStr.size() > 0 && ownerStr == addressStr) then {
       ([
         ScriptTransfer(i.caller, 1, assetId),
-        Burn(stakedNFTId, 1),
 
         DeleteEntry("signArtNft_" + stakedNFTIdStr + "_assetId"),
         DeleteEntry("signArtNft_" + assetIdStr + "_owner")
