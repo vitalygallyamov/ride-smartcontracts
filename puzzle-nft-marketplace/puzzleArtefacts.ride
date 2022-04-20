@@ -4,6 +4,7 @@
 
 # constants
 let puzzleAssetId = base58'HEB8Qaw9xrWpWs8tHsiATYGBWDBtP2S7kcPALrMu43AS'
+let testPuzzleAssetId = base58'AAC4GKXW6F49NrohKwcpTd9EtV6PoN7QW5RvXKhq2Qti'
 let usdnAssetId = base58'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p'
 
 let puzzlePoolAddress = base58'3PFDgzu1UtswAkCMxqqQjbTeHaX4cMab8Kh'
@@ -101,7 +102,7 @@ func deltaUsdnSum(puzzleAmount: Int, puzzlePriceUsdn: Int, isEagleHolder: Boolea
 
 @Callable(i)
 func generateArtefact() = {
-  if (i.payments.size() == 1 && i.payments[0].assetId == puzzleAssetId && i.payments[0].amount > 0) then {
+  if (i.payments.size() == 1 && i.payments[0].assetId == testPuzzleAssetId && i.payments[0].amount > 0) then {
 
     # 1. calculate price payment and check it
     let puzzlePriceUsdn = getPuzzlePrice()
@@ -122,12 +123,12 @@ func generateArtefact() = {
         let extraTransactionList = if (paymentUsdnDelta > 0) then {
           let returnPuzzleAmount = fraction(paymentUsdnDelta, 1_0000_0000, puzzlePriceUsdn)
           [
-            ScriptTransfer(i.caller, returnPuzzleAmount, puzzleAssetId),
-            Burn(puzzleAssetId, i.payments[0].amount - returnPuzzleAmount)
+            ScriptTransfer(i.caller, returnPuzzleAmount, testPuzzleAssetId),
+            Burn(testPuzzleAssetId, i.payments[0].amount - returnPuzzleAmount)
           ]
         } else {
           [
-            Burn(puzzleAssetId, i.payments[0].amount)
+            Burn(testPuzzleAssetId, i.payments[0].amount)
           ]
         }
 
@@ -143,7 +144,7 @@ func generateArtefact() = {
 }
 
 @Callable(i)
-func spendArtefact() = {
+func spendArtefact(poolDomain: String) = {
   if (i.payments.size() == 1 && i.payments[0].amount == 1) then {
     let nftAsset = assetInfo(i.payments[0].assetId.value()).value()
     if (isValidNFT(nftAsset)) then {
@@ -152,6 +153,7 @@ func spendArtefact() = {
 
       strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
       [
+        StringEntry("domain_"+poolDomain+"_purchasedBy", i.caller.toString()),
         StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
         IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
       ]
@@ -161,4 +163,5 @@ func spendArtefact() = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
         
