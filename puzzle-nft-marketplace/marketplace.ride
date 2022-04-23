@@ -72,7 +72,7 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
           StringEntry("nft_" + assetNameStr + "_buyOutAssetId", buyOutAsset.getAssetString()),
           StringEntry("nft_" + assetNameStr + "_royaltyReceiver", royaltyReceiver),
           StringEntry("nft_" + assetNameStr + "_seller", i.originCaller.toString()),
-          StringEntry("address_" + i.originCaller.toString() + "_nft", assetNameStr),
+          StringEntry("address_" + i.originCaller.toString() + "_nft_" + assetNameStr, assetNameStr),
           IntegerEntry("address_" + i.originCaller.toString() + "_nft_" + assetNameStr + "_startSaleAt", height)
         ]
 
@@ -110,7 +110,7 @@ func buyNFT(nftId: String) = {
         DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
         DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
         DeleteEntry("nft_" + nftId + "_seller"),
-        DeleteEntry("address_" + sellerStr + "_nft"),
+        DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
         DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
       ], nftAsset.id.toBase58String())
     } else throw("The buyout asset does not match the purchase asset")
@@ -131,7 +131,7 @@ func cancelSell(nftId: String) = {
       DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
       DeleteEntry("nft_" + nftId + "_seller"),
-      DeleteEntry("address_" + sellerStr + "_nft"),
+      DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
     ], nftId)
   } else throw("You are not a seller")
