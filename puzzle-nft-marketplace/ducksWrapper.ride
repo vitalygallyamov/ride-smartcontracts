@@ -2,7 +2,7 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let nftCreationAddress = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let nftCreationAddress = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
@@ -126,10 +126,11 @@ func unlock() = {
     strict inv1 = if (assetBalance(this, assetId) > 0) then {unit} else {invoke(Address(farmingAddress), "unstakeNFT", [assetIdStr], [])}  # TODO: jackpot unstaking
     strict eggEarned = assetBalance(this, eggAssetId) - assetBalanceBefore
 
+    strict inv2 = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
+
     ([
       ScriptTransfer(i.caller, 1, assetId),
       ScriptTransfer(i.caller, eggEarned, eggAssetId),
-      Burn(stakedNFTId, 1),
       DeleteEntry("address_" + addressStr + "_lockedDuck_" + assetIdStr), 
       DeleteEntry("nft_" + stakedNFTIdStr + "_duckId"),
       DeleteEntry("duck_" + assetIdStr + "_owner")
