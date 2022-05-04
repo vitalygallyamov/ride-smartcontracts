@@ -3,9 +3,10 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
+let signArtWrapperStr = "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC"
 let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
 
-let royaltyPercent = 10
+let royaltyPercent = 7
 
 func checkNFT(asset: Asset) = {
   asset.issuer.bytes == createNftDapp && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
@@ -63,9 +64,14 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
       if (buyOutPrice > 0) then {
 
         let assetNameStr = toBase58String(nft.id)
-        let royaltyReceiver = match getString(Address(createNftDapp), "nft_" + assetNameStr + "_issuer") {
+        let nftIssuer = match getString(Address(createNftDapp), "nft_" + assetNameStr + "_issuer") {
           case a: String => a
           case _ => i.caller.toString()
+        }
+        let royaltyReceiver = if (nftIssuer != signArtWrapperStr) then {
+          nftIssuer
+        } else {
+          assetInfo(nftId).value().description.split(" ")[2].split(".")[0]
         }
         
         [
@@ -100,7 +106,7 @@ func buyNFT(nftId: String) = {
 
     # calculate royalty
     let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
-    let marketFee = fraction(buyOutPrice, 5, 100)
+    let marketFee = fraction(buyOutPrice, 3, 100)
 
     if (pmt.assetId == buyOutAsset.id) then {
       ([
