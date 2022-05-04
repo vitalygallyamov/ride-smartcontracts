@@ -30,7 +30,8 @@ func lock() = {
     let artDesc = getStringValue(Address(signArtContractAddress), "art_desc_" + artIdStr + "_" + creatorStr)
     let artUrl = getStringValue(Address(signArtContractAddress), "art_display_cid_" + artIdStr + "_" + creatorStr)
 
-    let desc = if (artDesc.size() > 0) then artDesc else "NFT from signArt"
+    let descPrefix = "Created by " + creatorStr + ". " + name + ". "
+    let desc = if (artDesc.size() > 0) then descPrefix+artDesc else descPrefix+"NFT from signArt"
     let imageLink = "https://ipfs.io/ipfs/" + artUrl
 
     if (name.size() > 0 && artUrl.size() > 0) then {
