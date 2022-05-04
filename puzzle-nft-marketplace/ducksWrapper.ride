@@ -79,7 +79,7 @@ func lock() = {
   let assetColor = assetName.split("")[size(assetName.split(""))-1]
   let assetRarity = getAssetFarmingPower(assetId)._2
 
-  if (assetIssuer != incubatorAddress && assetIssuer != breederAddress) then { throw("ivalid NFT attached") } 
+  if (assetIssuer != incubatorAddress && assetIssuer != breederAddress) then { throw("invalid NFT attached") } 
   else {
     strict perchesAvailable = match getInteger(Address(farmingAddress), "address_" + this.toString() + "_perchesAvailable_" + assetColor) {
       case b:Int => b
@@ -95,10 +95,15 @@ func lock() = {
       true
     }
 
+    let sterileStr = match getInteger(Address(breederAddress), "asset_"+assetId.toBase58String()+"_children") {
+      case x: Int => "Sterile"
+      case _ => "Fertile"
+    }
+    let nameSuffix = assetRarity.toString() + "%"
     let imageLink = "https://wavesducks.com/api/v1/ducks/"+assetName.drop(5).dropRight(3)+".svg?onPerch="+isOnPerch.toString()+"&color="+assetColor
-    let name = if (isOnPerch) then {"Staked Duck"} else {"Waves Duck"}
+    let name = if (isOnPerch) then {"Staked Duck "+nameSuffix} else {"Waves Duck "+nameSuffix}
 
-    strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name, "Wrapped Waves Duck " + assetName + " with rarity " + assetRarity.toString(), imageLink, "ducks"], [])) {
+    strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name, sterileStr + " Waves Duck " + assetName + " with rarity " + assetRarity.toString(), imageLink, "ducks"], [])) {
       case x: String => x
       case _ => throw("something went wrong during creation of NFT")
     }
