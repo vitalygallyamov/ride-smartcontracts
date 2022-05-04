@@ -3,6 +3,7 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
+let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
 
 let royaltyPercent = 10
 
@@ -99,12 +100,14 @@ func buyNFT(nftId: String) = {
 
     # calculate royalty
     let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
+    let marketFee = fraction(buyOutPrice, 5, 100)
 
     if (pmt.assetId == buyOutAsset.id) then {
       ([
         ScriptTransfer(i.caller, 1, nftAsset.id),
         ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart, buyOutAsset.id),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAsset.id),
+        ScriptTransfer(marketFeeAddress, marketFee, buyOutAsset.id),
 
         DeleteEntry("nft_" + nftId + "_buyOutPrice"),
         DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
