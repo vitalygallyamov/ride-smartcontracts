@@ -105,7 +105,7 @@ func buyNFT(nftId: String) = {
     if (pmt.assetId == buyOutAsset.id) then {
       ([
         ScriptTransfer(i.caller, 1, nftAsset.id),
-        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart, buyOutAsset.id),
+        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee, buyOutAsset.id),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAsset.id),
         ScriptTransfer(marketFeeAddress, marketFee, buyOutAsset.id),
 
