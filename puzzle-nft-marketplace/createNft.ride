@@ -24,7 +24,8 @@ func checkNFT(asset: Asset) = {
 
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
-  if (image.indexOf("https://") != 0) then {
+  if (true) then {throw("issuance of new NFTs is limited")}
+  else if (image.indexOf("https://") != 0) then {
     throw("https link to image required")
   } else {
     let asset = Issue(nftName, nftDesc, 1, 0, false, unit, 0)
@@ -58,7 +59,7 @@ func burnNFT() = {
     let issuer = tryGetString("nft_" + assetIdStr + "_issuer")
     let data = tryGetString("nft_" + assetIdStr + "_data")
 
-    let partsData = data.split(", ")
+    let partsData = data.split(" ,")
     let partsCollection = partsData[0].split(": ")
     let collectionDomain = partsCollection[1].drop(1).dropRight(1)
 
