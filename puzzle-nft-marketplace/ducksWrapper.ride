@@ -2,7 +2,8 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let nftCreationAddress = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
+let nftCreationAddressGateway = base58'3P8LVqVKhTViMJau96KNir6FhHr4WnfoW57'
+let nftCreationAddressPuzzle = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
@@ -26,6 +27,8 @@ func tryGetString(key: String) = {
 let accessItemAssetId = tryGetString("static_accessItemAssetId").fromBase58String()
 let accessItemPrice = tryGetInteger("static_accessItemPrice")
 
+func isJackpotDuck(assetNameParts: List[String]) = { assetNameParts[assetNameParts.size() - 2] == "J" }
+
 func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
 func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
 func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
@@ -35,6 +38,9 @@ func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumula
 func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
 func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
 func isSymbolI(accumulated: Int, sym: String) = { if (sym == "I") then {accumulated+1} else {accumulated+0} }
+func isSymbolK(accumulated: Int, sym: String) = { if (sym == "K") then {accumulated+1} else {accumulated+0} }
+func isSymbolS(accumulated: Int, sym: String) = { if (sym == "S") then {accumulated+1} else {accumulated+0} }
+func isSymbolT(accumulated: Int, sym: String) = { if (sym == "T") then {accumulated+1} else {accumulated+0} }
 
 func getAmountOrClear(amount: String) = {
   if (amount.contains("0")) then {""} else {amount}
@@ -72,12 +78,16 @@ func getAssetFarmingPower(assetId: ByteVector) = {
 
 @Callable(i)
 func lock() = {
+  let nftCreationAddress = if (i.caller == Address(base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A')) then {nftCreationAddressPuzzle} else {nftCreationAddressGateway}
+
   let addressStr = i.caller.toString()
   let assetId = i.payments[0].value().assetId.value()
   let assetIssuer = assetInfo(assetId).value().issuer.bytes
   let assetName = assetInfo(assetId).value().name.value()
-  let assetColor = assetName.split("")[size(assetName.split(""))-1]
-  let assetRarity = getAssetFarmingPower(assetId)._2
+  let assetNameParts = assetName.split("")
+  let isJackpot = isJackpotDuck(assetNameParts)
+  let assetColor = if (isJackpot) then {"G"} else {assetName.split("")[size(assetName.split(""))-1]}
+  let assetRarity = if (isJackpot) then {100} else {getAssetFarmingPower(assetId)._2}
 
   if (assetIssuer != incubatorAddress && assetIssuer != breederAddress) then { throw("invalid NFT attached") } 
   else {
@@ -90,8 +100,12 @@ func lock() = {
     strict isOnPerch = if (assetRarity < 50 || (perchesAvailable == 0 && eggBalance < 1_0000_0000)) then {false} else {
       strict inv1 = if (perchesAvailable > 0) then { unit } else {
         invoke(Address(farmingAddress), "buyPerch", [assetColor, ""], [AttachedPayment(eggAssetId, 1_0000_0000)])
-      } 
-      strict inv2 = invoke(Address(farmingAddress), "stakeNFT", [], [AttachedPayment(assetId, 1)])  # TODO: jackpot staking
+      }
+      strict inv2 = if (isJackpot == false) then {
+        invoke(Address(farmingAddress), "stakeNFT", [], [AttachedPayment(assetId, 1)])
+      } else {
+        invoke(Address(farmingAddress), "stakeJackpot", [assetColor], [AttachedPayment(assetId, 1)])
+      }
       true
     }
 
@@ -119,16 +133,22 @@ func lock() = {
 
 @Callable(i)
 func unlock() = {
+  let nftCreationAddress = if (i.caller == Address(base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A')) then {nftCreationAddressPuzzle} else {nftCreationAddressGateway}
+
   let addressStr = i.caller.toString()
   let stakedNFTId = i.payments[0].assetId.value()  # todo: check amount = 1
   let stakedNFTIdStr = stakedNFTId.toBase58String()
   let assetIdStr = tryGetString("nft_" + stakedNFTIdStr + "_duckId")
   let assetId = assetIdStr.fromBase58String()
+  let assetName = assetInfo(assetId).value().name.value()
+  let assetNameParts = assetName.split("")
+  let isJackpot = isJackpotDuck(assetNameParts)
+  let unstakeFuncName = if isJackpot == true then "unstakeJackpot" else "unstakeNFT"
 
   if (tryGetString("duck_" + assetIdStr + "_owner") != addressStr) then {throw("duck is not yours")} 
   else {
     strict assetBalanceBefore = assetBalance(this, eggAssetId)
-    strict inv1 = if (assetBalance(this, assetId) > 0) then {unit} else {invoke(Address(farmingAddress), "unstakeNFT", [assetIdStr], [])}  # TODO: jackpot unstaking
+    strict inv1 = if (assetBalance(this, assetId) > 0) then {unit} else {invoke(Address(farmingAddress), unstakeFuncName, [assetIdStr], [])}
     strict eggEarned = assetBalance(this, eggAssetId) - assetBalanceBefore
 
     strict inv2 = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
