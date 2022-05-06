@@ -59,7 +59,7 @@ func burnNFT() = {
     let issuer = tryGetString("nft_" + assetIdStr + "_issuer")
     let data = tryGetString("nft_" + assetIdStr + "_data")
 
-    let partsData = data.split(" ,")
+    let partsData = data.split(", ")
     let partsCollection = partsData[0].split(": ")
     let collectionDomain = partsCollection[1].drop(1).dropRight(1)
 
