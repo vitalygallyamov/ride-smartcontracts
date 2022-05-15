@@ -35,7 +35,7 @@ func lock() = {
     let imageLink = "https://ipfs.io/ipfs/" + artUrl
 
     if (name.size() > 0 && artUrl.size() > 0) then {
-      strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.take(16), desc, imageLink, "signArt"], [])) {
+      strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.take(16), desc.take(1000), imageLink, "signArt"], [])) {
         case x: String => x
         case _ => throw("Something went wrong during creation of NFT")
       }
