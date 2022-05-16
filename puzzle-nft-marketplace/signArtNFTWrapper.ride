@@ -9,6 +9,10 @@ func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
   asset.issuer.bytes == issuerAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
+func clearString(str: String) = {
+  str.split(" – ").makeString(" ")
+}
+
 @Callable(i)
 func lock() = {
   let addressStr = i.caller.toString()
@@ -35,7 +39,7 @@ func lock() = {
     let imageLink = "https://ipfs.io/ipfs/" + artUrl
 
     if (name.size() > 0 && artUrl.size() > 0) then {
-      strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.take(16), desc.take(1000), imageLink, "signArt"], [])) {
+      strict stakedNFTIdStr = match (invoke(Address(nftCreationAddress), "createNFT", [name.clearString().take(16), desc.clearString().take(1000), imageLink, "signArt"], [])) {
         case x: String => x
         case _ => throw("Something went wrong during creation of NFT")
       }
