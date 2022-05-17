@@ -102,7 +102,8 @@ func lock() = {
       strict inv1 = if (perchesAvailable > 0) then { unit } else {
         invoke(Address(farmingAddress), "buyPerch", [assetColor, ""], [AttachedPayment(eggAssetId, 1_0000_0000)])
       }
-      strict inv2 = if (isJackpot == false) then {
+      strict inv2 = if (perchesAvailable > 0) then { unit } else 
+      if (isJackpot == false) then {
         invoke(Address(farmingAddress), "stakeNFT", [], [AttachedPayment(assetId, 1)])
       } else {
         invoke(Address(farmingAddress), "stakeJackpot", [assetColor], [AttachedPayment(assetId, 1)])
