@@ -12,6 +12,10 @@ let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
 
 let royaltyPercent = 7
 
+func isNFT(asset: Asset) = {
+  asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
 func checkNFT(asset: Asset) = {
   asset.issuer.bytes == createNftDapp && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
@@ -46,6 +50,28 @@ func getAssetString(assetId: ByteVector|Unit) = {
 
 func getAssetBytes(assetIdStr: String) = {
   if (assetIdStr == "WAVES") then {unit} else {assetIdStr.fromBase58String()}
+}
+
+# when user approve bet or cancel sell nft or after buy nft, we need return all asset to bets owners
+func getAllDeleteEntries(nftId: String, exclude: String) = {
+  let auctionKey = "auction_" + nftId + "_bets"
+  let auctionData = tryGetString(auctionKey)
+
+  let excludeId = if (exclude.size() > 0) then exclude else ""
+  if (auctionData.size() == 0) then [] else {
+    func getReturnTransactions(accum: List[ScriptTransfer], next: String) = {
+      let betParsedData = next.split("_")
+      let betOwner = betParsedData[0]
+      let betAmount = parseIntValue(betParsedData[1])
+      let betAssetId = if (betParsedData[2] == "WAVES") then {unit} else {
+        betParsedData[2].fromBase58String()
+      }
+      if (excludeId.size() > 0 && excludeId == next) then accum else {
+        accum :+ ScriptTransfer(Address(betOwner.fromBase58String()), betAmount, betAssetId)
+      }
+    }
+    FOLD<50>(auctionData.split(","), [], getReturnTransactions)
+  }
 }
 
 @Callable(i)
@@ -183,6 +209,141 @@ func like(nftId: String) = {
     } else throw("You can like if you stake 1 or more Puzzles")
   } else throw("Invalid NFT id")
   
+}
+
+@Callable(i)
+func addBet(nftId: String) = {
+  if (i.payments[0].amount > 0 &&
+    (!i.payments[0].assetId.isDefined() || !isNFT(assetInfo(i.payments[0].assetId.value()).value()))) then {
+
+    let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+    let nftAmount = match assetBalance(this, nftAsset.id) {
+      case c:Int => c
+      case _ => 0
+    }
+
+    if (nftAmount == 1 && nftAsset.checkNFT()) then {
+      let callerStr = i.caller.toString()
+      let assetAmount = i.payments[0].amount
+      let assetIdStr = i.payments[0].assetId.getAssetString()      
+
+      let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+      let auctionData = tryGetString(auctionKey)
+      let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
+
+      if (auctionData.split(",").size() + 1 < 50) then {
+        let exist = auctionData.contains(addedData)
+
+        if (!exist) then {
+          let updatedData = match getString(auctionKey) {
+            case s:String => s + "," + addedData
+            case _ => addedData
+          }
+
+          # let sellerStr = getStringValue("nft_" + nftId + "_seller")
+
+          [
+            StringEntry(auctionKey, updatedData)
+            # How send transfer transaction to seller with attachments ?
+          ]
+        } else throw("Bet exists")
+      } else throw("You cannot create more than 50 bets for 1 NFT")
+    } else throw("Invalid NFT Id.")
+  } else throw("Payment not attached")
+}
+
+@Callable(i)
+func deleteBet(nftId: String, betId: String) = {
+  let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+
+  let auctionData = tryGetString(auctionKey)
+
+  if (auctionData.size() > 0) then {
+    let callerStr = i.caller.toString()
+    let bets = auctionData.split(",")
+
+    let betIndex = match bets.indexOf(betId) {
+      case idx: Int => idx
+      case _ => throw("Bet not found by id")
+    }
+
+    let betData = bets.getElement(betIndex)
+    let betParsedData = betData.split("_")
+
+    let betOwner = betParsedData[0]
+    let betAmount = parseIntValue(betParsedData[1])
+    let betAssetId = if (betParsedData[2] == "WAVES") then {unit} else {
+      betParsedData[2].fromBase58String()
+    }
+
+    let updatedData = if (betIndex == 0) then {
+      auctionData.drop(betData.size())
+    } else {
+      auctionData.split(betData).makeString("")
+    }
+
+    if (betOwner == callerStr) then {
+
+      let updateDataList = if (updatedData.size() == 0) then {
+        [DeleteEntry(auctionKey)]
+      } else {
+        [StringEntry(auctionKey, updatedData)]
+      }
+
+      [
+        ScriptTransfer(i.caller, betAmount, betAssetId)
+      ] ++ updateDataList
+
+    } else throw("This is not your bet")
+  } else throw("Bet not found")
+}
+
+@Callable(i)
+func approveBet(nftId: String, betId: String) = {
+  let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+  if (assetBalance(this, nftAsset.id) == 1) then {
+    let sellerStr = tryGetString("nft_" + nftId + "_seller")
+    let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+
+    if (sellerStr == i.originCaller.toString()) then {
+      let auctionData = tryGetString(auctionKey)
+
+      if (auctionData.size() > 0) then {
+        let bets = auctionData.split(",")
+
+        let betParsedData = betId.split("_")
+
+        let betOwner = betParsedData[0]
+        let betAmount = parseIntValue(betParsedData[1])
+        let betAssetId = if (betParsedData[2] == "WAVES") then {unit} else {
+          betParsedData[2].fromBase58String()
+        }
+
+        # calculate royalty
+        let royaltyReceiver = tryGetString("nft_" + nftId + "_royaltyReceiver")
+        let royaltyPart = fraction(betAmount, royaltyPercent, 100)
+        let marketFee = fraction(betAmount, 3, 100)
+
+        if (bets.containsElement(betId) && betAmount > 0) then {
+          [
+            ScriptTransfer(i.caller, 1, nftAsset.id),
+            ScriptTransfer(Address(sellerStr.fromBase58String()), betAmount - royaltyPart - marketFee, betAssetId),
+            ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
+            ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
+
+            DeleteEntry("nft_" + nftId + "_buyOutPrice"),
+            DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
+            DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+            DeleteEntry("nft_" + nftId + "_seller"),
+            DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
+            DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
+            DeleteEntry(auctionKey)
+          ] ++ getAllDeleteEntries(nftAsset.id.toBase58String(), betId)
+        } else throw("Bet not found by Id")
+      } else throw("Bet not found")
+    } else throw("You are not a seller")
+  } else throw("NFT not found on contract") 
 }
 
 @Verifier(tx)
