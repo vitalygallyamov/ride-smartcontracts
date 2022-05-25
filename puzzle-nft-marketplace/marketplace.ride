@@ -4,7 +4,7 @@
 
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
-let puzzleStateAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
+let puzzleStakeAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
 
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
@@ -161,6 +161,7 @@ func cancelSell(nftId: String) = {
   let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
 
   if (size(sellerStr) > 0 && sellerStr == i.originCaller.toString()) then {
     ([
@@ -171,7 +172,8 @@ func cancelSell(nftId: String) = {
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
       DeleteEntry("nft_" + nftId + "_seller"),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
-      DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
+      DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
+      DeleteEntry(auctionKey)
     ], nftId)
   } else throw("You are not a seller")
 }
@@ -186,7 +188,7 @@ func like(nftId: String) = {
   if (nftAsset.isDefined() && !isDuckNft && !isSignArtNft && checkNFT(nftAsset.value())) then {
 
     let callerAddress = i.caller.toString()
-    let countStaked = match getInteger(Address(puzzleStateAddress), callerAddress + "_staked") {
+    let countStaked = match getInteger(Address(puzzleStakeAddress), callerAddress + "_staked") {
       case c:Int => c
       case _ => 0
     }
@@ -277,18 +279,13 @@ func deleteBet(nftId: String, betId: String) = {
       betParsedData[2].fromBase58String()
     }
 
-    let updatedData = if (betIndex == 0) then {
-      auctionData.drop(betData.size())
-    } else {
-      auctionData.split(betData).makeString("")
-    }
-
     if (betOwner == callerStr) then {
+      let newBets = bets.removeByIndex(betIndex)
 
-      let updateDataList = if (updatedData.size() == 0) then {
+      let updateDataList = if (newBets.size() == 0) then {
         [DeleteEntry(auctionKey)]
       } else {
-        [StringEntry(auctionKey, updatedData)]
+        [StringEntry(auctionKey, newBets.makeString(","))]
       }
 
       [
@@ -306,7 +303,7 @@ func approveBet(nftId: String, betId: String) = {
     let sellerStr = tryGetString("nft_" + nftId + "_seller")
     let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
 
-    if (sellerStr == i.originCaller.toString()) then {
+    if (sellerStr == i.caller.toString()) then {
       let auctionData = tryGetString(auctionKey)
 
       if (auctionData.size() > 0) then {
@@ -327,8 +324,8 @@ func approveBet(nftId: String, betId: String) = {
 
         if (bets.containsElement(betId) && betAmount > 0) then {
           [
-            ScriptTransfer(i.caller, 1, nftAsset.id),
-            ScriptTransfer(Address(sellerStr.fromBase58String()), betAmount - royaltyPart - marketFee, betAssetId),
+            ScriptTransfer(Address(betOwner.fromBase58String()), 1, nftAsset.id),
+            ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
 
