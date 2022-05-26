@@ -35,7 +35,7 @@ func checkNFT(asset: Asset) = {
 
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
-  if (issuersWhitelist.indexOf(i.caller.toString()) != unit) then {throw("issuance of new NFTs is limited")}
+  if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
   else if (image.indexOf("https://") != 0) then {
     throw("https link to image required")
   } else {
