@@ -2,6 +2,17 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
+let issuersWhitelist = [
+  "3P3iV85eXfkcA3Dd13EpZBYvs1vkKX6AYEN",
+  "3PHFAavxj2ePJqFB46H2aRGA7oQL6kz1rJJ",
+  "3P6peovAkVN3px6Zuv8y2noTWHFM4R5Wjj8",
+  "3P5CQkvk8Pu6rGP3Qav4Lwskwa8pLhNwTbR",
+  "3PHKDCQScvSPHvdCUeucFkx5Q1xMURA9kbr",
+  "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ",
+  "3P2wMCDjtxeLdfQrpR8WUe5zNeScM4UaL3o",
+  "3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo",
+  "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC"
+]
 
 func tryGetInteger(key: String) = {
   match getInteger(this, key) {
@@ -24,7 +35,7 @@ func checkNFT(asset: Asset) = {
 
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
-  if (i.caller.toString() != "3PHKDCQScvSPHvdCUeucFkx5Q1xMURA9kbr" && i.caller.toString() != "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ" && i.caller.toString() != "3P2wMCDjtxeLdfQrpR8WUe5zNeScM4UaL3o" && i.caller.toString() != "3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo" && i.caller.toString() != "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC") then {throw("issuance of new NFTs is limited")}
+  if (issuersWhitelist.indexOf(i.caller.toString()) != unit) then {throw("issuance of new NFTs is limited")}
   else if (image.indexOf("https://") != 0) then {
     throw("https link to image required")
   } else {
@@ -83,4 +94,3 @@ func burnNFT() = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-
