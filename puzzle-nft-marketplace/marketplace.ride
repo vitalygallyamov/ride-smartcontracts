@@ -182,8 +182,8 @@ func cancelSell(nftId: String) = {
 func like(nftId: String) = {
   let nftAsset = assetInfo(nftId.fromBase58String())
 
-  let duckNftId = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").value()
-  let signArtNftId = getString(Address(nftSignArtWrapper), "signArtNft_" + nftId + "_assetId").value()
+  let duckNftId = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").valueOrElse("")
+  let signArtNftId = getString(Address(nftSignArtWrapper), "signArtNft_" + nftId + "_assetId").valueOrElse("")
 
   let updatedNftId =
     if (duckNftId.size() > 0) then
