@@ -53,7 +53,7 @@ func getAssetBytes(assetIdStr: String) = {
 }
 
 # when user approve bet or cancel sell nft or after buy nft, we need return all asset to bets owners
-func getAllDeleteEntries(nftId: String, exclude: String) = {
+func allTransfersForBid(nftId: String, exclude: String) = {
   let auctionKey = "auction_" + nftId + "_bets"
   let auctionData = tryGetString(auctionKey)
 
@@ -70,7 +70,7 @@ func getAllDeleteEntries(nftId: String, exclude: String) = {
         accum :+ ScriptTransfer(Address(betOwner.fromBase58String()), betAmount, betAssetId)
       }
     }
-    FOLD<50>(auctionData.split(","), [], getReturnTransactions)
+    FOLD<26>(auctionData.split(","), [], getReturnTransactions)
   }
 }
 
@@ -182,10 +182,18 @@ func cancelSell(nftId: String) = {
 func like(nftId: String) = {
   let nftAsset = assetInfo(nftId.fromBase58String())
 
-  let isDuckNft = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").isDefined()
-  let isSignArtNft = getString(Address(nftSignArtWrapper), "signArtNft_" + nftId + "_assetId").isDefined()
+  let duckNftId = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").value()
+  let signArtNftId = getString(Address(nftSignArtWrapper), "signArtNft_" + nftId + "_assetId").value()
 
-  if (nftAsset.isDefined() && !isDuckNft && !isSignArtNft && checkNFT(nftAsset.value())) then {
+  let updatedNftId =
+    if (duckNftId.size() > 0) then
+      {duckNftId}
+    else if(signArtNftId.size() > 0) then
+      {signArtNftId}
+    else
+      {nftId}
+
+  if (nftAsset.isDefined() && checkNFT(nftAsset.value())) then {
 
     let callerAddress = i.caller.toString()
     let countStaked = match getInteger(Address(puzzleStakeAddress), callerAddress + "_staked") {
@@ -194,8 +202,8 @@ func like(nftId: String) = {
     }
 
     if (countStaked >= 1_0000_0000) then {
-      let nftLikesKey = "nft_" + nftId + "_likes"
-      let nftLikesValue = tryGetString("nft_" + nftId + "_likes")
+      let nftLikesKey = "nft_" + updatedNftId + "_likes"
+      let nftLikesValue = tryGetString("nft_" + updatedNftId + "_likes")
 
       if (!nftLikesValue.indexOf(callerAddress).isDefined()) then {
         let newLikesValue = if (nftLikesValue.size() == 0 ) then {
@@ -214,7 +222,7 @@ func like(nftId: String) = {
 }
 
 @Callable(i)
-func addBet(nftId: String) = {
+func placeBid(nftId: String) = {
   if (i.payments[0].amount > 0 &&
     (!i.payments[0].assetId.isDefined() || !isNFT(assetInfo(i.payments[0].assetId.value()).value()))) then {
 
@@ -233,7 +241,7 @@ func addBet(nftId: String) = {
       let auctionData = tryGetString(auctionKey)
       let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
 
-      if (auctionData.split(",").size() + 1 < 50) then {
+      if (auctionData.split(",").size() + 1 < 28) then {
         let exist = auctionData.contains(addedData)
 
         if (!exist) then {
@@ -249,13 +257,13 @@ func addBet(nftId: String) = {
             # How send transfer transaction to seller with attachments ?
           ]
         } else throw("Bet exists")
-      } else throw("You cannot create more than 50 bets for 1 NFT")
+      } else throw("You cannot create more than 27 bets for 1 NFT")
     } else throw("Invalid NFT Id.")
   } else throw("Payment not attached")
 }
 
 @Callable(i)
-func deleteBet(nftId: String, betId: String) = {
+func cancelBid(nftId: String, betId: String) = {
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
 
@@ -297,7 +305,7 @@ func deleteBet(nftId: String, betId: String) = {
 }
 
 @Callable(i)
-func approveBet(nftId: String, betId: String) = {
+func acceptBid(nftId: String, betId: String) = {
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   if (assetBalance(this, nftAsset.id) == 1) then {
     let sellerStr = tryGetString("nft_" + nftId + "_seller")
@@ -336,7 +344,7 @@ func approveBet(nftId: String, betId: String) = {
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
             DeleteEntry(auctionKey)
-          ] ++ getAllDeleteEntries(nftAsset.id.toBase58String(), betId)
+          ] ++ allTransfersForBid(nftAsset.id.toBase58String(), betId)
         } else throw("Bet not found by Id")
       } else throw("Bet not found")
     } else throw("You are not a seller")
