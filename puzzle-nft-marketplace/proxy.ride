@@ -118,6 +118,32 @@ func cancelSellAndUnlock(nftId: String) = {
 }
 
 @Callable(i)
+func unlock() = {
+  let asset = assetInfo(i.payments[0].assetId.value()).value()
+
+  if (asset.isNftFromMarketplace() && i.payments[0].amount == 1) then {
+    let assetIdStr = asset.id.toBase58String()
+    let wrapAddress = assetIdStr.getAddressForUnwrap()
+    # if wrapped nft, then call unlock
+    if (wrapAddress.isDefined()) then {
+      strict unlockedNftStr = match invoke(wrapAddress.value(), "unlock", [], [AttachedPayment(asset.id, 1)]) {
+        case s:String => s
+        case _ => throw("Somthing wrong when unlock NFT in address: " + wrapAddress.value().bytes.toBase58String())
+      }
+
+      [
+        ScriptTransfer(i.caller, 1, unlockedNftStr.fromBase58String())
+      ]
+    } else {
+      [
+        ScriptTransfer(i.caller, 1, asset.id)
+      ]
+    }
+
+  } else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
 func buy(nftId: String) = {
  
   strict boughtNft = match invoke(Address(marketplaceContractAddress), "buyNFT", [nftId], i.payments) {
