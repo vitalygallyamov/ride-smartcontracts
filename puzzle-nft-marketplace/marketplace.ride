@@ -132,6 +132,7 @@ func buyNFT(nftId: String) = {
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   let buyOutAsset = tryGetAssetInfo(buyOutAssetId, "Buyout asset not found")
+  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
   if (buyOutPrice > 0 && pmt.amount >= buyOutPrice) then {
 
@@ -151,8 +152,9 @@ func buyNFT(nftId: String) = {
         DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
         DeleteEntry("nft_" + nftId + "_seller"),
         DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
-        DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt")
-      ], nftAsset.id.toBase58String())
+        DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
+        DeleteEntry(auctionKey)
+      ] ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftAsset.id.toBase58String())
     } else throw("The buyout asset does not match the purchase asset")
   } else throw("Payment amount must be greater than zero")
 }
@@ -175,7 +177,7 @@ func cancelSell(nftId: String) = {
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
       DeleteEntry(auctionKey)
-    ], nftId)
+    ] ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftId)
   } else throw("You are not a seller")
 }
 
@@ -233,33 +235,33 @@ func placeBid(nftId: String) = {
       case _ => 0
     }
 
-    if (nftAmount == 1 && nftAsset.checkNFT()) then {
-      let callerStr = i.caller.toString()
-      let assetAmount = i.payments[0].amount
-      let assetIdStr = i.payments[0].assetId.getAssetString()      
+    let sellerStr = getStringValue("nft_" + nftId + "_seller")
+    if (sellerStr != i.caller.toString()) then {
+      if (nftAmount == 1 && nftAsset.checkNFT()) then {
+        let callerStr = i.caller.toString()
+        let assetAmount = i.payments[0].amount
+        let assetIdStr = i.payments[0].assetId.getAssetString()
 
-      let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
-      let auctionData = tryGetString(auctionKey)
-      let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
+        let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
+        let auctionData = tryGetString(auctionKey)
+        let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
 
-      if (auctionData.split(",").size() + 1 < 28) then {
-        let exist = auctionData.contains(addedData)
+        if (auctionData.split(",").size() + 1 < 28) then {
+          let exist = auctionData.contains(i.caller.toString())
 
-        if (!exist) then {
-          let updatedData = match getString(auctionKey) {
-            case s:String => s + "," + addedData
-            case _ => addedData
-          }
+          if (!exist) then {
+            let updatedData = match getString(auctionKey) {
+              case s:String => s + "," + addedData
+              case _ => addedData
+            }
 
-          # let sellerStr = getStringValue("nft_" + nftId + "_seller")
-
-          [
-            StringEntry(auctionKey, updatedData)
-            # How send transfer transaction to seller with attachments ?
-          ]
-        } else throw("Bet exists")
-      } else throw("You cannot create more than 27 bets for 1 NFT")
-    } else throw("Invalid NFT Id.")
+            [
+              StringEntry(auctionKey, updatedData)
+            ]
+          } else throw("You have already bid")
+        } else throw("You cannot create more than 27 bets for 1 NFT")
+      } else throw("Invalid NFT Id.")
+    } else throw("Seller cannot bid")
   } else throw("Payment not attached")
 }
 
