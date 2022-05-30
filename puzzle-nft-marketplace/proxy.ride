@@ -131,13 +131,13 @@ func unlock() = {
         case _ => throw("Somthing wrong when unlock NFT in address: " + wrapAddress.value().bytes.toBase58String())
       }
 
-      [
+      ([
         ScriptTransfer(i.caller, 1, unlockedNftStr.fromBase58String())
-      ]
+      ], unlockedNftStr)
     } else {
-      [
+      ([
         ScriptTransfer(i.caller, 1, asset.id)
-      ]
+      ], asset.id.toBase58String())
     }
 
   } else throw("Ivalid NFT attached")

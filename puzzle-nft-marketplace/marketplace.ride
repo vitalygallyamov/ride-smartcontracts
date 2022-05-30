@@ -5,6 +5,7 @@
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
 let puzzleStakeAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
+let proxyDappAddress = base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A'
 
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
@@ -54,7 +55,7 @@ func getAssetBytes(assetIdStr: String) = {
 
 # when user approve bet or cancel sell nft or after buy nft, we need return all asset to bets owners
 func allTransfersForBid(nftId: String, exclude: String) = {
-  let auctionKey = "auction_" + nftId + "_bets"
+  let auctionKey = "auction_" + nftId + "_bids"
   let auctionData = tryGetString(auctionKey)
 
   let excludeId = if (exclude.size() > 0) then exclude else ""
@@ -161,7 +162,7 @@ func cancelSell(nftId: String) = {
   let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
-  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
   if (size(sellerStr) > 0 && sellerStr == i.originCaller.toString()) then {
     ([
@@ -237,7 +238,7 @@ func placeBid(nftId: String) = {
       let assetAmount = i.payments[0].amount
       let assetIdStr = i.payments[0].assetId.getAssetString()      
 
-      let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+      let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
       let auctionData = tryGetString(auctionKey)
       let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
 
@@ -265,7 +266,7 @@ func placeBid(nftId: String) = {
 @Callable(i)
 func cancelBid(nftId: String, betId: String) = {
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
-  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+  let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
   let auctionData = tryGetString(auctionKey)
 
@@ -309,7 +310,7 @@ func acceptBid(nftId: String, betId: String) = {
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   if (assetBalance(this, nftAsset.id) == 1) then {
     let sellerStr = tryGetString("nft_" + nftId + "_seller")
-    let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bets"
+    let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
     if (sellerStr == i.caller.toString()) then {
       let auctionData = tryGetString(auctionKey)
@@ -330,9 +331,14 @@ func acceptBid(nftId: String, betId: String) = {
         let royaltyPart = fraction(betAmount, royaltyPercent, 100)
         let marketFee = fraction(betAmount, 3, 100)
 
+        strict unlockedNftStr = match invoke(Address(proxyDappAddress), "unlock", [], [AttachedPayment(nftId.fromBase58String(), 1)]) {
+          case s:String => s
+          case _ => throw("Somthing wrong when unlock NFT in address: " + proxyDappAddress.toBase58String())
+        }
+
         if (bets.containsElement(betId) && betAmount > 0) then {
           [
-            ScriptTransfer(Address(betOwner.fromBase58String()), 1, nftAsset.id),
+            ScriptTransfer(Address(betOwner.fromBase58String()), 1, unlockedNftStr.fromBase58String()),
             ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
