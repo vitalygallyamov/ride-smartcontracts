@@ -246,7 +246,7 @@ func placeBid(nftId: String) = {
         let auctionData = tryGetString(auctionKey)
         let addedData = callerStr + "_" + assetAmount.toString() + "_" + assetIdStr
 
-        if (auctionData.split(",").size() + 1 < 28) then {
+        if (auctionData.split(",").size() + 1 < 21) then {
           let exist = auctionData.contains(i.caller.toString())
 
           if (!exist) then {
