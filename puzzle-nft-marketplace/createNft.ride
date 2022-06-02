@@ -11,7 +11,8 @@ let issuersWhitelist = [
   "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ",
   "3P2wMCDjtxeLdfQrpR8WUe5zNeScM4UaL3o",
   "3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo",
-  "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC"
+  "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC",
+  "3PFkgvC9y6zHy64zEAscKKgaNY3yipiLqbW"
 ]
 
 func tryGetInteger(key: String) = {
