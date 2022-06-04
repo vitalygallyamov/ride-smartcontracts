@@ -153,6 +153,7 @@ func spendArtefact(poolDomain: String) = {
       strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
       [
         StringEntry("domain_"+poolDomain+"_purchasedBy", i.caller.toString()),
+        StringEntry("domain_"+poolDomain+"_createdBy", nftAsset.id.toBase58String()),
         StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
         IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
       ]
