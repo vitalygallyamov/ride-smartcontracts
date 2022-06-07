@@ -145,19 +145,21 @@ func generateArtefact() = {
 @Callable(i)
 func spendArtefact(poolDomain: String) = {
   if (i.payments.size() == 1 && i.payments[0].amount == 1) then {
-    let nftAsset = assetInfo(i.payments[0].assetId.value()).value()
-    if (isValidNFT(nftAsset)) then {
-      let soldCountKey = i.caller.toString() + "_sold_count";
-      let addressSoldKey = i.caller.toString() + "_address_spend";
+    if (poolDomain.size() >= 2 && poolDomain.size() <= 13) then {
+      let nftAsset = assetInfo(i.payments[0].assetId.value()).value()
+      if (isValidNFT(nftAsset)) then {
+        let soldCountKey = i.caller.toString() + "_sold_count";
+        let addressSoldKey = i.caller.toString() + "_address_spend";
 
-      strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
-      [
-        StringEntry("domain_"+poolDomain+"_purchasedBy", i.caller.toString()),
-        StringEntry("domain_"+poolDomain+"_createdBy", nftAsset.id.toBase58String()),
-        StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
-        IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
-      ]
-    } else throw("Invalid NFT.")
+        strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
+        [
+          StringEntry("domain_"+poolDomain+"_purchasedBy", i.caller.toString()),
+          StringEntry("domain_"+poolDomain+"_createdBy", nftAsset.id.toBase58String()),
+          StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
+          IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
+        ]
+      } else throw("Invalid NFT.")
+    } else throw("Pool domain name specified incorrectly, length must be from 2 to 13 characters")
   } else throw("Invalid payment. You should use NFT for payment.")
 }
 
