@@ -11,6 +11,9 @@ let proxyDappAddress = base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A'
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
 
+let duckFeeAddress = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
+
+let ducksPercent = 30
 let royaltyPercent = 7
 
 func isNFT(asset: Asset) = {
@@ -126,26 +129,44 @@ func buyNFT(nftId: String) = {
     else throw("Attached payment is required")
 
   let buyOutPrice = tryGetInteger("nft_" + nftId + "_buyOutPrice")
-  let buyOutAssetId = tryGetString("nft_" + nftId + "_buyOutAssetId")
+  let buyOutAssetIdStr = tryGetString("nft_" + nftId + "_buyOutAssetId")
   let royaltyReceiver = tryGetString("nft_" + nftId + "_royaltyReceiver")
   let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
-  let buyOutAsset = tryGetAssetInfo(buyOutAssetId, "Buyout asset not found")
+  let buyOutAssetId = if (buyOutAssetIdStr == "WAVES") then {unit} else {
+    match assetInfo(buyOutAssetIdStr.fromBase58String()) {
+      case a:Asset => a.id
+      case _ => throw("Buyout asset not found")
+    }
+  }
   let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
   if (buyOutPrice > 0 && pmt.amount >= buyOutPrice) then {
 
-    # calculate royalty
-    let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
-    let marketFee = fraction(buyOutPrice, 3, 100)
+    # if duck nft, send fee to ducks
+    let duckNftId = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").valueOrElse("")
+    let transferFees = if (duckNftId.size() > 0) then {
+      # calculate duck fee
+      let duckFee = fraction(buyOutPrice, ducksPercent, 100)
+      [
+        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - duckFee, buyOutAssetId),
+        ScriptTransfer(Address(duckFeeAddress), duckFee, buyOutAssetId)
+      ]
+    } else {
+      # calculate royalty
+      let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
+      let marketFee = fraction(buyOutPrice, 3, 100)
+      [
+        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee, buyOutAssetId),
+        ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAssetId),
+        ScriptTransfer(marketFeeAddress, marketFee, buyOutAssetId)
+      ]
+    }
 
-    if (pmt.assetId == buyOutAsset.id) then {
+    if (pmt.assetId == buyOutAssetId) then {
       ([
         ScriptTransfer(i.caller, 1, nftAsset.id),
-        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee, buyOutAsset.id),
-        ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAsset.id),
-        ScriptTransfer(marketFeeAddress, marketFee, buyOutAsset.id),
 
         DeleteEntry("nft_" + nftId + "_buyOutPrice"),
         DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
@@ -154,7 +175,7 @@ func buyNFT(nftId: String) = {
         DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
         DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
         DeleteEntry(auctionKey)
-      ] ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftAsset.id.toBase58String())
+      ] ++ transferFees ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftAsset.id.toBase58String())
     } else throw("The buyout asset does not match the purchase asset")
   } else throw("Payment amount must be greater than zero")
 }

@@ -151,10 +151,15 @@ func spendArtefact(poolDomain: String) = {
         let soldCountKey = i.caller.toString() + "_sold_count";
         let addressSoldKey = i.caller.toString() + "_address_spend";
 
+        let domainPurchasedByKey = "domain_"+poolDomain+"_purchasedBy"
+        let domainCreatedBy = "domain_"+poolDomain+"_createdBy"
+
+        let s = getString(this, domainPurchasedByKey).valueOrErrorMessage("Domain with this name already exists")
+
         strict inv = invoke(Address(nftCreationAddress), "burnNFT", [], i.payments)
         [
-          StringEntry("domain_"+poolDomain+"_purchasedBy", i.caller.toString()),
-          StringEntry("domain_"+poolDomain+"_createdBy", nftAsset.id.toBase58String()),
+          StringEntry(domainPurchasedByKey, i.caller.toString()),
+          StringEntry(domainCreatedBy, nftAsset.id.toBase58String()),
           StringEntry(addressSoldKey, nftAsset.id.toBase58String()),
           IntegerEntry(soldCountKey, getIntegerData(soldCountKey) + 1)
         ]
