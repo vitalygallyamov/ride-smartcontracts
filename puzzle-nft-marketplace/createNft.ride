@@ -12,7 +12,11 @@ let issuersWhitelist = [
   "3P2wMCDjtxeLdfQrpR8WUe5zNeScM4UaL3o",
   "3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo",
   "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC",
-  "3PFkgvC9y6zHy64zEAscKKgaNY3yipiLqbW"
+  "3PFkgvC9y6zHy64zEAscKKgaNY3yipiLqbW",
+  "3PGGSiLuwGmm7ChfjDrmEZBd6HxQJn8N1NM",
+  "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD", # puzzle gang Vitaly
+  "3P5bL6V4oGTZtMTirj9WxtbxUntqXdjevAE", # puzzle gang Vadim
+  "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi"  # puzzle gang Alexandra
 ]
 
 func tryGetInteger(key: String) = {
