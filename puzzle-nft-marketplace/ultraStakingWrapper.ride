@@ -1,0 +1,106 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eagleBuyerAddress = Address(base58'3P7FFQkgALLZDJpCf3smY517wjgPMswGoRP')
+let signArtIssuerAddress = Address(base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV')
+let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+let ultraStakingAddress = Address(base58'3PKUxbZaSYfsR7wu2HaAgiirHYwAMupDrYW')
+
+# Check nft asset
+func checkNFT(asset: Asset) = {
+  let isEagleNFT = match(getString(eagleBuyerAddress, "art_" + toBase58String(asset.id) + "_type")) {
+    case s:String => s == "eagle"
+    case _ => false
+  }
+  let isAniaNFT = match(getString(createNFTAddress, "nft_" + toBase58String(asset.id) + "_issuer")) {
+    case s:String => s == "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ"
+    case _ => false
+  }
+  
+  asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1 &&
+  ((isEagleNFT && asset.issuer == signArtIssuerAddress) || (isAniaNFT && asset.issuer == createNFTAddress))
+}
+
+# issue fake NFT for market
+func getDataForIssueNFT(asset: Asset) = {
+  # if eagle from SignArt
+  if (asset.issuer == signArtIssuerAddress) then {
+    # Parsing a string by pattern 
+    # Creator: (creatorStr), ArtID: (artIdStr), SignID: (signIdStr), Artwork name: (artWorkName), Issue: (issueStr)
+    # But if the string changes, everything breaks
+    let partsOfString = asset.description.split(",")
+    let creatorStr = partsOfString[0].split(":")[1].drop(1)
+    let artIdStr = partsOfString[1].split(":")[1].drop(1)
+    #let artWorkName = partsOfString[2].split(":")[1].drop(1)
+
+    let name = getStringValue(signArtIssuerAddress, "art_name_" + artIdStr + "_" + creatorStr)
+    let artDesc = getStringValue(signArtIssuerAddress, "art_desc_" + artIdStr + "_" + creatorStr)
+    let artUrl = getStringValue(signArtIssuerAddress, "art_display_cid_" + artIdStr + "_" + creatorStr)
+
+    let descPrefix = "Created by " + creatorStr + ". " + name + ". "
+    let desc = if (artDesc.size() > 0) then descPrefix+artDesc else descPrefix+"NFT from signArt"
+    let imageLink = "https://ipfs.io/ipfs/" + artUrl
+
+    if (name.size() > 0 && artUrl.size() > 0) then {
+
+      # return data for issue
+      [name.take(16), desc.take(1000), imageLink, "signArt"]
+    }
+    else throw("Wrong data for create eagle")
+  } else if(asset.issuer == createNFTAddress) then {
+    let assetIdStr = toBase58String(asset.id)
+    let imageUrl = getStringValue(createNFTAddress, "nft_" + assetIdStr + "_image")
+
+    # return data for issue
+    [asset.name, asset.description, imageUrl, "ania"]
+  }
+  else throw("Data for create NFT didn't create")
+}
+
+@Callable(i)
+func lock() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].value().assetId.value()
+
+  let asset = assetInfo(assetId).value()
+  let assetDesc = asset.description
+
+  if (i.payments[0].value().amount == 1 && asset.checkNFT()) then {
+    
+    strict issueParams = getDataForIssueNFT(asset)
+    strict invStake = invoke(ultraStakingAddress, "stake", [], []) # try to stake NFT
+
+    #try issue fake NFT for market
+    strict fakeIssueIdStr = match(invoke(createNFTAddress, "createNFT", issueParams, [])) {
+      case s:String => s
+      case _ => throw("Something went wrong during creation of NFT")
+    }
+    (
+      [
+        ScriptTransfer(i.caller, 1, fakeIssueIdStr.fromBase58String()),
+
+        StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id))
+      ],
+      fakeIssueIdStr
+    )
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
+func unlock() = {
+  let addressStr = i.caller.toString()
+  let stakedNFTId = i.payments[0].value().assetId.value()
+
+  let stakedNFTAsset = assetInfo(stakedNFTId).value()
+  if (i.payments[0].value().amount == 1 && stakedNFTAsset.decimals == 0 && stakedNFTAsset.reissuable == false && stakedNFTAsset.quantity == 1) then {
+    
+    []
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
