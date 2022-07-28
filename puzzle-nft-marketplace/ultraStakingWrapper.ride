@@ -2,13 +2,15 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
+let usdnAssetId = base58'DG2xFkPdDwKUoBkzGAhQtLpSGzfXLiCYPEzeKH2Ad24p'
+
 let eagleBuyerAddress = Address(base58'3P7FFQkgALLZDJpCf3smY517wjgPMswGoRP')
 let signArtIssuerAddress = Address(base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV')
 let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 let ultraStakingAddress = Address(base58'3PKUxbZaSYfsR7wu2HaAgiirHYwAMupDrYW')
+let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
 
-# Check nft asset
-func checkNFT(asset: Asset) = {
+func isCompatibleNFT(asset: Asset) = {
   let isEagleNFT = match(getString(eagleBuyerAddress, "art_" + toBase58String(asset.id) + "_type")) {
     case s:String => s == "eagle"
     case _ => false
@@ -17,9 +19,14 @@ func checkNFT(asset: Asset) = {
     case s:String => s == "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ"
     case _ => false
   }
-  
+
+  isEagleNFT || isAniaNFT
+}
+
+# Check nft asset
+func isNftAsset(asset: Asset) = {
   asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1 &&
-  ((isEagleNFT && asset.issuer == signArtIssuerAddress) || (isAniaNFT && asset.issuer == createNFTAddress))
+  (asset.issuer == createNFTAddress || asset.issuer == signArtIssuerAddress)
 }
 
 # issue fake NFT for market
@@ -66,12 +73,12 @@ func lock() = {
   let asset = assetInfo(assetId).value()
   let assetDesc = asset.description
 
-  if (i.payments[0].value().amount == 1 && asset.checkNFT()) then {
-    
-    strict issueParams = getDataForIssueNFT(asset)
-    strict invStake = invoke(ultraStakingAddress, "stake", [], []) # try to stake NFT
+  if (i.payments[0].value().amount == 1 && asset.isNftAsset() && asset.isCompatibleNFT()) then {
 
-    #try issue fake NFT for market
+    strict issueParams = getDataForIssueNFT(asset)
+    strict invStake = invoke(ultraStakingAddress, "stake", [], [i.payments[0]]) # try to stake NFT
+
+    # try issue fake NFT for market
     strict fakeIssueIdStr = match(invoke(createNFTAddress, "createNFT", issueParams, [])) {
       case s:String => s
       case _ => throw("Something went wrong during creation of NFT")
@@ -80,7 +87,9 @@ func lock() = {
       [
         ScriptTransfer(i.caller, 1, fakeIssueIdStr.fromBase58String()),
 
-        StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id))
+        StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
+        StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr),
+        StringEntry("nft_" + fakeIssueIdStr + "_owner", i.originCaller.toString())
       ],
       fakeIssueIdStr
     )
@@ -91,12 +100,38 @@ func lock() = {
 @Callable(i)
 func unlock() = {
   let addressStr = i.caller.toString()
-  let stakedNFTId = i.payments[0].value().assetId.value()
+  let assetId = i.payments[0].value().assetId.value()
 
-  let stakedNFTAsset = assetInfo(stakedNFTId).value()
-  if (i.payments[0].value().amount == 1 && stakedNFTAsset.decimals == 0 && stakedNFTAsset.reissuable == false && stakedNFTAsset.quantity == 1) then {
+  let callerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_caller")
+  let ownerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_owner")
+  let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
+
+  let nftAsset = assetInfo(assetId).value()
+  if (i.payments[0].value().amount == 1 && nftAsset.isNftAsset() && addressStr == callerAddress) then {
     
-    []
+    strict usdnBalanceBefore = assetBalance(this, usdnAssetId)
+    strict invUnStake = invoke(ultraStakingAddress, "unStake", [originalNftAssetIdStr], []) # try to unstake NFT
+    strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
+
+    # calc reward
+    strict usdnBalancAfter = assetBalance(this, usdnAssetId)
+    strict reward = usdnBalanceBefore - usdnBalancAfter
+
+    strict rewardTransaction = if (reward > 0) then {
+      # market fee
+      let marketFee = fraction(reward, 3, 100)
+      [
+        ScriptTransfer(marketFeeAddress, marketFee, usdnAssetId),
+        ScriptTransfer(Address(ownerAddress.fromBase58String()), reward - marketFee, usdnAssetId)
+      ]
+    } else []
+    
+    [
+      ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
+
+      DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
+      DeleteEntry("nft_" + toBase58String(assetId) + "_owner")
+    ] ++ rewardTransaction
   }
   else throw("Ivalid NFT attached")
 }

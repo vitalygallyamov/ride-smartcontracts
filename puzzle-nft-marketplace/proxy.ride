@@ -3,11 +3,13 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let nftCreationAddress = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
+let eagleBuyerAddress = base58'3P7FFQkgALLZDJpCf3smY517wjgPMswGoRP'
 let signArtNftCreationAddress = base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV'
 
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
+let nftUltraStakingWrapper = base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk'
 
 # ducks contracts for create nft
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
@@ -26,6 +28,19 @@ func ifDuckNft(asset: Asset) = {
   && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
+func ifUltraStakingNft(asset: Asset) = {
+  let isEagleNFT = match(getString(Address(eagleBuyerAddress), "art_" + toBase58String(asset.id) + "_type")) {
+    case s:String => s == "eagle"
+    case _ => false
+  }
+  let isAniaNFT = match(getString(Address(nftCreationAddress), "nft_" + toBase58String(asset.id) + "_issuer")) {
+    case s:String => s == "3PMki5sHBsQb4KgDknbUwsL3YgxaCzaZnCJ" && asset.name.contains("Bored Ania #")
+    case _ => false
+  }
+
+  isEagleNFT || isAniaNFT
+}
+
 # check marketplace NFT
 func isNftFromMarketplace(asset: Asset) = {
   asset.issuer.bytes == nftCreationAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
@@ -33,6 +48,7 @@ func isNftFromMarketplace(asset: Asset) = {
 
 # choose wrap address by nft type
 func getAddressForWrap(asset: Asset) = {
+  # if (asset.ifUltraStakingNft()) then Address(nftUltraStakingWrapper)
   if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
   else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
   else unit
@@ -48,8 +64,14 @@ func getAddressForUnwrap(nftStr: String) = {
     case s: String => s.size() > 0
     case _ => false
   }
+  let isUltraStaking = match (getString(Address(nftUltraStakingWrapper), "nft_" + nftStr + "_assetId")) {
+    case s: String => s.size() > 0
+    case _ => false
+  }
   
-  if (isSignArt) then {
+  if (isUltraStaking) then {
+    Address(nftUltraStakingWrapper)
+  } else if (isSignArt) then {
     Address(nftSignArtWrapper)
   } else if (isDuck) then {
     Address(nftDuckWrapper)
