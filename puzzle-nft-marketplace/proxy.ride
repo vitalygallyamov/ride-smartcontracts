@@ -10,12 +10,17 @@ let signArtNftCreationAddress = base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV'
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
 let nftUltraStakingWrapper = base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk'
+let nftWavesPunksWrapper = base58'3PD1sd55PYzmGUrQ896Qt3uvdbtgjCVpajE'
 
 # ducks contracts for create nft
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
 
 let marketplaceContractAddress = base58'3PATXDVE53rKJtkwXYV3tvuLVS2fDtGtKCc'
+
+# waves punks addresses
+let zombieIssuerAddress = Address(base58'3P7QrWH1ETLfKAJcFHYPJmQusNbDuW98Hop')
+let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
 
 # check signArt NFT
 func ifSignArtNft(asset: Asset) = {
@@ -25,6 +30,12 @@ func ifSignArtNft(asset: Asset) = {
 # check duck NFT
 func ifDuckNft(asset: Asset) = {
   (asset.issuer.bytes == incubatorAddress || asset.issuer.bytes == breederAddress)
+  && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+# check waves punks NFT
+func ifWavesPunksNft(asset: Asset) = {
+  (asset.issuer == zombieIssuerAddress || asset.issuer == punksIssuerAddress)
   && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
@@ -58,6 +69,7 @@ func getAddressForWrap(asset: Asset) = {
       case _ => false
     }
   if (isAllow && asset.ifUltraStakingNft()) then Address(nftUltraStakingWrapper)
+  else if (asset.ifWavesPunksNft()) then Address(nftWavesPunksWrapper)
   else if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
   else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
   else unit
@@ -77,9 +89,16 @@ func getAddressForUnwrap(nftStr: String) = {
     case s: String => s.size() > 0
     case _ => false
   }
+
+  let isWavesPunks = match (getString(Address(nftWavesPunksWrapper), "nft_" + nftStr + "_assetId")) {
+    case s: String => s.size() > 0
+    case _ => false
+  }
   
   if (isUltraStaking) then {
     Address(nftUltraStakingWrapper)
+  } else if (isWavesPunks) then {
+    Address(nftWavesPunksWrapper)
   } else if (isSignArt) then {
     Address(nftSignArtWrapper)
   } else if (isDuck) then {

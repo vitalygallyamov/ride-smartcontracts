@@ -1,0 +1,102 @@
+{-# STDLIB_VERSION 6 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+
+let zombieIssuerAddress = Address(base58'3P7QrWH1ETLfKAJcFHYPJmQusNbDuW98Hop')
+let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
+
+# Check nft asset
+func isValidNftAsset(asset: Asset) = {
+  asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+func isWavesPunksIssuer(asset: Asset) = {
+    match([
+        zombieIssuerAddress,
+        punksIssuerAddress
+    ].indexOf(asset.issuer)) {
+        case x: Int => true
+        case _ => false
+    }
+}
+
+func valueByKey(data: List[String], key: String) = {
+    func find(accum: String, next: String) = {
+        if (next.contains("\"" + key + "\": ")) then {
+            next.split(": ")[1].drop(1).dropRight(1)
+        }
+        else accum
+    }
+
+    FOLD<5>(data, "", find)
+}
+
+func getIssuerParams(asset: Asset) = {
+    let parsedData = asset.description.drop(1).dropRight(1).split(", ")
+    if (asset.issuer == punksIssuerAddress) then {
+        [asset.name, "WAVES PUNKS is the first collection of digital punks on Waves blockchain", valueByKey(parsedData, "url"), "WavesPunks"]
+    } else if (asset.issuer == zombieIssuerAddress) then {
+        [asset.name, "Second Chapter of the first-ever NFT-punks on WAVES blockchain", valueByKey(parsedData, "url"), "WavesPunks Zombie"]
+    } else throw("Wrong NFT asset for issue")
+}
+
+@Callable(i)
+func lock() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].value().assetId.value()
+
+  let asset = assetInfo(assetId).value()
+  let assetDesc = asset.description
+
+  if (i.payments[0].value().amount == 1 && asset.isValidNftAsset() && asset.isWavesPunksIssuer()) then {
+
+    let issueParams = getIssuerParams(asset)
+
+    # try issue fake NFT for market
+    # TODO description
+    strict fakeIssueIdStr = match(invoke(createNFTAddress, "createNFT", issueParams, [])) {
+      case s:String => s
+      case _ => throw("Something went wrong during creation of NFT")
+    }
+    (
+      [
+        ScriptTransfer(i.caller, 1, fakeIssueIdStr.fromBase58String()),
+
+        StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
+        StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr)
+      ],
+      fakeIssueIdStr
+    )
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
+func unlock() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].value().assetId.value()
+
+  let callerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_caller")
+  let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
+
+  let nftAsset = assetInfo(assetId).value()
+  if (i.payments[0].value().amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress) then {
+    
+    strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
+    
+    ([
+      ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
+
+      DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
+      DeleteEntry("nft_" + toBase58String(assetId) + "_caller")
+    ],
+    originalNftAssetIdStr)
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        

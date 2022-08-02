@@ -13,6 +13,7 @@ let issuersWhitelist = [
   "3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo",
   "3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC",
   "3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk", # ultra staking wrapper
+  "3PD1sd55PYzmGUrQ896Qt3uvdbtgjCVpajE", # waves punks wrapper
   "3PFkgvC9y6zHy64zEAscKKgaNY3yipiLqbW",
   "3PGGSiLuwGmm7ChfjDrmEZBd6HxQJn8N1NM",
   "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD", # puzzle gang Vitaly

@@ -200,6 +200,7 @@ func unlock() = {
       ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
 
       DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
+      DeleteEntry("nft_" + toBase58String(assetId) + "_caller"),
       DeleteEntry("nft_" + toBase58String(assetId) + "_owner"),
 
       StringEntry("reward_history", updatedData.makeString(";"))
