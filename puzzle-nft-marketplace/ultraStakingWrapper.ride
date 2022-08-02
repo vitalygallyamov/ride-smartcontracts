@@ -54,7 +54,7 @@ func updateRewards(listData: List[String], reward: Int, totalPower: Int) = {
   } else listData
 }
 
-func getNftReward(data: String, assetId: String) = {
+func getNftReward(assetId: String, data: String) = {
   if (data.size() > 0 && assetId.size() > 0) then {
     let index = data.indexOf(assetId).value()
     let droped = data.drop(index + assetId.size() + 1)
@@ -165,8 +165,8 @@ func unlock() = {
     strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
 
     # calc reward
-    strict usdnBalancAfter = assetBalance(this, usdnAssetId)
-    strict reward = usdnBalanceBefore - usdnBalancAfter
+    strict usdnBalanceAfter = assetBalance(this, usdnAssetId)
+    strict reward = usdnBalanceAfter - usdnBalanceBefore
 
     strict rewardHistory = getString("reward_history").valueOrElse("")
     strict updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower)
