@@ -35,15 +35,22 @@ func isCompatibleNFT(asset: Asset) = {
   isEagleNFT || isAniaNFT
 }
 
-func updateRewards(listData: List[String], reward: Int, totalPower: Int) = {
+func calcAssetReward(assetId: String, reward: Int, totalPower: Int) = {
+  let assetPower = fraction(10000, checkNFTValidity(fromBase58String(assetId)), 5)
+  fraction(assetPower, reward, totalPower)
+}
+
+func updateRewards(listData: List[String], reward: Int, totalPower: Int, skeepAssetId: String) = {
 
   func iterate(accum: List[String], next: String) = {
     let data = next.split("_") # assetId_usdnReward
     if (data[0].size() > 0) then {
-      let assetPower = fraction(10000, checkNFTValidity(fromBase58String(data[0])), 5)
-    
-      let nftReward = fraction(assetPower, reward, totalPower) + parseInt(data[1]).value()
-      accum :+ (data[0] + "_" + nftReward.toString())
+      if (skeepAssetId.size() > 0 && skeepAssetId == data[0]) then {
+        accum
+      } else {
+        let nftReward = calcAssetReward(data[0], reward, totalPower) + parseInt(data[1]).value()
+        accum :+ (data[0] + "_" + nftReward.toString())
+      }
     } else {
       accum
     }
@@ -125,7 +132,12 @@ func lock() = {
     strict reward = usdnBalanceAfter - usdnBalanceBefore
 
     let rewardHistory = getString("reward_history").valueOrElse("")
-    let updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower) ++ [assetId.toBase58String() + "_0"]
+    let updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower, assetId.toBase58String())
+    let addData = if (rewardHistory.contains(assetId.toBase58String() + "_")) then {
+      updatedData
+    } else {
+      updatedData ++ [assetId.toBase58String() + "_0"]
+    }
 
     # try issue fake NFT for market
     strict fakeIssueIdStr = match(invoke(createNFTAddress, "createNFT", issueParams, [])) {
@@ -169,15 +181,9 @@ func unlock() = {
     strict reward = usdnBalanceAfter - usdnBalanceBefore
 
     strict rewardHistory = getString("reward_history").valueOrElse("")
-    strict updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower)
-    strict nftReward = originalNftAssetIdStr.getNftReward(rewardHistory).value()
+    strict updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower, originalNftAssetIdStr)
 
-    let removeNftIndex = updatedData.indexOf(originalNftAssetIdStr + "_" + nftReward.toString()).valueOrElse(-1)
-    let historyUpdate = if (removeNftIndex >= 0) then {
-      [StringEntry("reward_history", updatedData.removeByIndex(removeNftIndex).makeString(";"))]
-    } else {
-      [StringEntry("reward_history", updatedData.makeString(";"))]
-    }
+    strict nftReward = originalNftAssetIdStr.getNftReward(rewardHistory).value() + originalNftAssetIdStr.calcAssetReward(reward, totalPower)
 
     strict rewardTransaction = if (nftReward > 0) then {
       # market fee
@@ -192,8 +198,10 @@ func unlock() = {
       ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
 
       DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
-      DeleteEntry("nft_" + toBase58String(assetId) + "_owner")
-    ] ++ rewardTransaction ++ historyUpdate,
+      DeleteEntry("nft_" + toBase58String(assetId) + "_owner"),
+
+      StringEntry("reward_history", updatedData.makeString(";"))
+    ] ++ rewardTransaction,
     originalNftAssetIdStr)
   }
   else throw("Ivalid NFT attached")
