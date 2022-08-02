@@ -63,11 +63,13 @@ func updateRewards(listData: List[String], reward: Int, totalPower: Int, skeepAs
 
 func getNftReward(assetId: String, data: String) = {
   if (data.size() > 0 && assetId.size() > 0) then {
-    let index = data.indexOf(assetId).value()
-    let droped = data.drop(index + assetId.size() + 1)
-    if (droped.contains(";")) then {
-      droped.split(";")[0].parseInt()
-    } else droped.parseInt()
+    let index = data.indexOf(assetId).valueOrElse(-1)
+    if (index >= 0) then {
+      let droped = data.drop(index + assetId.size() + 1)
+      if (droped.contains(";")) then {
+        droped.split(";")[0].parseInt()
+      } else droped.parseInt()
+    } else 0
   } else 0
 }
 
@@ -151,7 +153,7 @@ func lock() = {
         StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
         StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr),
         StringEntry("nft_" + fakeIssueIdStr + "_owner", i.originCaller.toString()),
-        StringEntry("reward_history", updatedData.makeString(";"))
+        StringEntry("reward_history", addData.makeString(";"))
       ],
       fakeIssueIdStr
     )
