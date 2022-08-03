@@ -48,7 +48,7 @@ func updateRewards(listData: List[String], reward: Int, totalPower: Int, skeepAs
       if (skeepAssetId.size() > 0 && skeepAssetId == data[0]) then {
         accum
       } else {
-        let nftReward = calcAssetReward(data[0], reward, totalPower) + parseInt(data[1]).value()
+        let nftReward = (if (reward > 0) then calcAssetReward(data[0], reward, totalPower) else 0) + parseInt(data[1]).value()
         accum :+ (data[0] + "_" + nftReward.toString())
       }
     } else {
@@ -56,9 +56,7 @@ func updateRewards(listData: List[String], reward: Int, totalPower: Int, skeepAs
     }
   }
 
-  if (reward > 0) then {
-    FOLD<230>(listData, [], iterate)
-  } else listData
+  FOLD<230>(listData, [], iterate)
 }
 
 func getNftReward(assetId: String, data: String) = {
