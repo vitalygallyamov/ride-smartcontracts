@@ -65,7 +65,8 @@ func lock() = {
         ScriptTransfer(i.caller, 1, fakeIssueIdStr.fromBase58String()),
 
         StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
-        StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr)
+        StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr),
+        StringEntry("nft_" + fakeIssueIdStr + "_owner", i.originCaller.toString())
       ],
       fakeIssueIdStr
     )
@@ -79,10 +80,11 @@ func unlock() = {
   let assetId = i.payments[0].value().assetId.value()
 
   let callerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_caller")
+  let ownerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_owner")
   let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
 
   let nftAsset = assetInfo(assetId).value()
-  if (i.payments[0].value().amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress) then {
+  if (i.payments[0].value().amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress && ownerAddress == i.originCaller.toString()) then {
     
     strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
     
@@ -90,7 +92,8 @@ func unlock() = {
       ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
 
       DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
-      DeleteEntry("nft_" + toBase58String(assetId) + "_caller")
+      DeleteEntry("nft_" + toBase58String(assetId) + "_caller"),
+      DeleteEntry("nft_" + toBase58String(assetId) + "_owner")
     ],
     originalNftAssetIdStr)
   }
