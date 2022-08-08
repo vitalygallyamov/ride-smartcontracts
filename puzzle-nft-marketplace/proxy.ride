@@ -59,16 +59,7 @@ func isNftFromMarketplace(asset: Asset) = {
 
 # choose wrap address by nft type
 func getAddressForWrap(asset: Asset) = {
-  let allowAssets = [
-    "HqKqjXZCDqcJFphPY4nPTuni7ZWrGDB3b2ebqqsCHBgp",
-    "CjUDaUe8PGH4y28xdRScFTVzmBc8MdWebjRCWsLVPztw",
-    "B3mghbyC9AKkJaYNT7NV8kVQyLsoAoTzoLKYkr14s6Lm" #Ania Eagle
-  ]
-  let isAllow = match (allowAssets.indexOf(asset.id.toBase58String())) {
-      case t:Int => true
-      case _ => false
-    }
-  if (isAllow && asset.ifUltraStakingNft()) then Address(nftUltraStakingWrapper)
+  if (asset.ifUltraStakingNft()) then Address(nftUltraStakingWrapper)
   else if (asset.ifWavesPunksNft()) then Address(nftWavesPunksWrapper)
   else if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
   else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
