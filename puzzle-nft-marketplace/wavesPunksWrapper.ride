@@ -6,6 +6,7 @@ let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 
 let zombieIssuerAddress = Address(base58'3P7QrWH1ETLfKAJcFHYPJmQusNbDuW98Hop')
 let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
+let aliensIssuerAddress = Address(base58'3PBkrb5LrGDvCwkx4VHZzZkqMNvvGqrJJWj')
 
 # Check nft asset
 func isValidNftAsset(asset: Asset) = {
@@ -15,7 +16,8 @@ func isValidNftAsset(asset: Asset) = {
 func isWavesPunksIssuer(asset: Asset) = {
     match([
         zombieIssuerAddress,
-        punksIssuerAddress
+        punksIssuerAddress,
+        aliensIssuerAddress
     ].indexOf(asset.issuer)) {
         case x: Int => true
         case _ => false
@@ -39,18 +41,20 @@ func getIssuerParams(asset: Asset) = {
         [asset.name, "WAVES PUNKS is the first collection of digital punks on Waves blockchain", valueByKey(parsedData, "url"), "WavesPunks"]
     } else if (asset.issuer == zombieIssuerAddress) then {
         [asset.name, "Second Chapter of the first-ever NFT-punks on WAVES blockchain", valueByKey(parsedData, "url"), "WavesPunks Zombie"]
+    } else if (asset.issuer == aliensIssuerAddress) then {
+        [asset.name, "We has taken roots among you and feed on your cultural code", valueByKey(parsedData, "url"), "WavesPunks Memaliens"]
     } else throw("Wrong NFT asset for issue")
 }
 
 @Callable(i)
 func lock() = {
   let addressStr = i.caller.toString()
-  let assetId = i.payments[0].value().assetId.value()
+  let assetId = i.payments[0].assetId.value()
 
   let asset = assetInfo(assetId).value()
   let assetDesc = asset.description
 
-  if (i.payments[0].value().amount == 1 && asset.isValidNftAsset() && asset.isWavesPunksIssuer()) then {
+  if (i.payments[0].amount == 1 && asset.isValidNftAsset() && asset.isWavesPunksIssuer()) then {
 
     let issueParams = getIssuerParams(asset)
 
@@ -77,14 +81,14 @@ func lock() = {
 @Callable(i)
 func unlock() = {
   let addressStr = i.caller.toString()
-  let assetId = i.payments[0].value().assetId.value()
+  let assetId = i.payments[0].assetId.value()
 
   let callerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_caller")
   let ownerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_owner")
   let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
 
   let nftAsset = assetInfo(assetId).value()
-  if (i.payments[0].value().amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress && ownerAddress == i.originCaller.toString()) then {
+  if (i.payments[0].amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress && ownerAddress == i.originCaller.toString()) then {
     
     strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
     

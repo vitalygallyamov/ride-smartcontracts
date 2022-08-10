@@ -21,6 +21,7 @@ let marketplaceContractAddress = base58'3PATXDVE53rKJtkwXYV3tvuLVS2fDtGtKCc'
 # waves punks addresses
 let zombieIssuerAddress = Address(base58'3P7QrWH1ETLfKAJcFHYPJmQusNbDuW98Hop')
 let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
+let aliensIssuerAddress = Address(base58'3PBkrb5LrGDvCwkx4VHZzZkqMNvvGqrJJWj')
 
 # check signArt NFT
 func ifSignArtNft(asset: Asset) = {
@@ -35,7 +36,7 @@ func ifDuckNft(asset: Asset) = {
 
 # check waves punks NFT
 func ifWavesPunksNft(asset: Asset) = {
-  (asset.issuer == zombieIssuerAddress || asset.issuer == punksIssuerAddress)
+  (asset.issuer == zombieIssuerAddress || asset.issuer == punksIssuerAddress || asset.issuer == aliensIssuerAddress)
   && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
