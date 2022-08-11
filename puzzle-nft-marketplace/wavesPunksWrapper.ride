@@ -88,7 +88,7 @@ func unlock() = {
   let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
 
   let nftAsset = assetInfo(assetId).value()
-  if (i.payments[0].amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress && ownerAddress == i.originCaller.toString()) then {
+  if (i.payments[0].amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress) then {
     
     strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
     
