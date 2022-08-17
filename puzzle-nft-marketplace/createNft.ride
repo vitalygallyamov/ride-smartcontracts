@@ -20,7 +20,8 @@ let issuersWhitelist = [
   "3P5bL6V4oGTZtMTirj9WxtbxUntqXdjevAE", # puzzle gang Vadim
   "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi", # puzzle gang Alexandra
   "3PKHFX6W4aAr1e1b8MUTz5HmdWVUcjWhgY4", # puzzle gang Alex Stanovoy
-  "3PJVkx7XRo86zU88shLuKGmbRr7RkMSxjHj"  # address from Ania
+  "3PJVkx7XRo86zU88shLuKGmbRr7RkMSxjHj", # address from Ania
+  "3PLu7coMNV4naCxWkRemqga6o9zUhQppxsA"  # winner
 ]
 
 func tryGetInteger(key: String) = {
