@@ -7,6 +7,7 @@ let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 let zombieIssuerAddress = Address(base58'3P7QrWH1ETLfKAJcFHYPJmQusNbDuW98Hop')
 let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
 let aliensIssuerAddress = Address(base58'3PBkrb5LrGDvCwkx4VHZzZkqMNvvGqrJJWj')
+let madPunksIssuerAddress = Address(base58'3PJXfYMavRVzBDXqsFfwkLdEV7yuF5RToya')
 
 # Check nft asset
 func isValidNftAsset(asset: Asset) = {
@@ -17,7 +18,8 @@ func isWavesPunksIssuer(asset: Asset) = {
     match([
         zombieIssuerAddress,
         punksIssuerAddress,
-        aliensIssuerAddress
+        aliensIssuerAddress,
+        madPunksIssuerAddress
     ].indexOf(asset.issuer)) {
         case x: Int => true
         case _ => false
@@ -36,6 +38,12 @@ func valueByKey(data: List[String], key: String) = {
 }
 
 func getIssuerParams(asset: Asset) = {
+  if (asset.issuer == madPunksIssuerAddress) then {
+    let image = getStringValue(madPunksIssuerAddress, asset.id.toBase58String() + "_url")
+    let fract = getStringValue(madPunksIssuerAddress, asset.id.toBase58String() + "_fraction")
+    let type = getStringValue(madPunksIssuerAddress, asset.id.toBase58String() + "_type")
+    [asset.name, "Type: " + type + ". " + "Fraction: " + fract + ". " + asset.description, image, "WavesMadPunks"]
+  } else {
     let parsedData = asset.description.drop(1).dropRight(1).split(", ")
     if (asset.issuer == punksIssuerAddress) then {
         [asset.name, "WAVES PUNKS is the first collection of digital punks on Waves blockchain", valueByKey(parsedData, "url"), "WavesPunks"]
@@ -44,6 +52,7 @@ func getIssuerParams(asset: Asset) = {
     } else if (asset.issuer == aliensIssuerAddress) then {
         [asset.name, "We has taken roots among you and feed on your cultural code", valueByKey(parsedData, "url"), "WavesPunks Memaliens"]
     } else throw("Wrong NFT asset for issue")
+  }
 }
 
 @Callable(i)
