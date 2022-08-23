@@ -71,6 +71,45 @@ func createNFT(nftName: String, nftDesc: String, image: String, collectionName: 
 }
 
 @Callable(i)
+func mint(params: String) = {
+  # params format: name|desc|collectionName|originalFile|previewFile
+  let parsedParams = params.split("|")
+  let f = if (parsedParams.size() < 4) then throw("Wrong call params") else unit
+
+  let nftName = if (parsedParams[0].size() > 0 && parsedParams[0].size() < 17) then parsedParams[0] else throw("Wrong NFT name")
+  let nftDesc = parsedParams[1]
+  let collectionName = parsedParams[2]
+
+  let origFile = parsedParams[3]
+  let previewFile = if (parsedParams.size() > 4) then parsedParams[4] else origFile
+
+  if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
+  else if (origFile.indexOf("https://") != 0 || previewFile.indexOf("https://") != 0) then {
+    throw("https link to file required")
+  } else {
+    let asset = Issue(nftName, nftDesc, 1, 0, false, unit, 0)
+    let assetId = asset.calculateAssetId()
+    let assetIdStr = assetId.toBase58String()
+
+    let collectionDomain = i.caller.toString() + "_" + if (collectionName.size() > 0) then {collectionName} else {"basic"}
+    let nftNum = tryGetInteger("collection_" + collectionDomain + "_size") + 1
+
+    ([
+      StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"', 'num': "+nftNum.toString()+"}"),
+      StringEntry("nft_" + assetIdStr + "_image", previewFile),
+      StringEntry("nft_" + assetIdStr + "_original", origFile),
+      StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
+
+      IntegerEntry("collection_" + collectionDomain + "_size", nftNum),
+      StringEntry("collection_" + collectionDomain + "_assetId_" + assetIdStr, assetIdStr),
+
+      asset,
+      ScriptTransfer(i.caller, 1, assetId)
+    ], assetIdStr)
+  }
+}
+
+@Callable(i)
 func burnNFT() = {
   let assetId = i.payments[0].value().assetId.value()
   let asset = assetInfo(assetId).value()
@@ -95,6 +134,7 @@ func burnNFT() = {
 
         DeleteEntry("nft_" + assetIdStr + "_data"),
         DeleteEntry("nft_" + assetIdStr + "_image"),
+        DeleteEntry("nft_" + assetIdStr + "_original"),
         DeleteEntry("nft_" + assetIdStr + "_issuer"),
         DeleteEntry("collection_" + collectionDomain + "_assetId_" + assetIdStr)
       ]
