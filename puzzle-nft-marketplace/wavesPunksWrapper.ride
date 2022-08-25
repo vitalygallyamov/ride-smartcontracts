@@ -9,6 +9,7 @@ let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
 let aliensIssuerAddress = Address(base58'3PBkrb5LrGDvCwkx4VHZzZkqMNvvGqrJJWj')
 let madPunksIssuerAddress = Address(base58'3PJXfYMavRVzBDXqsFfwkLdEV7yuF5RToya')
 let madPunks2IssuerAddress = Address(base58'3P8LcmWrr9SFrxwheZQENov5fPHEWtiwroN')
+let madPunks3IssuerAddress = Address(base58'3PD5eTW5ZWzTBTph3LQmEt877DPCjQsGwwz')
 
 # Check nft asset
 func isValidNftAsset(asset: Asset) = {
@@ -21,7 +22,8 @@ func isWavesPunksIssuer(asset: Asset) = {
         punksIssuerAddress,
         aliensIssuerAddress,
         madPunksIssuerAddress,
-        madPunks2IssuerAddress
+        madPunks2IssuerAddress,
+        madPunks3IssuerAddress
     ].indexOf(asset.issuer)) {
         case x: Int => true
         case _ => false
@@ -40,7 +42,7 @@ func valueByKey(data: List[String], key: String) = {
 }
 
 func getIssuerParams(asset: Asset) = {
-  if (asset.issuer == madPunksIssuerAddress || asset.issuer == madPunks2IssuerAddress) then {
+  if (asset.issuer == madPunksIssuerAddress || asset.issuer == madPunks2IssuerAddress || asset.issuer == madPunks3IssuerAddress) then {
     # throw("Mad punks locked")
     let image = getStringValue(asset.issuer, asset.id.toBase58String() + "_url")
     let fract = getStringValue(asset.issuer, asset.id.toBase58String() + "_fraction")
