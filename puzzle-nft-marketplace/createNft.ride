@@ -51,7 +51,7 @@ func checkName(name: String) = {
 func getParamByKey(key: String, params: List[String]) = {
   func find(accum: String, next: String) = {
     if (accum.size() == 0) then {
-      let parsed = next.split(":")
+      let parsed = next.split("::")
       if (parsed[0] == key) then parsed[1] else accum
     } else accum
   }
@@ -89,13 +89,13 @@ func createNFT(nftName: String, nftDesc: String, image: String, collectionName: 
 
 @Callable(i)
 func mint(params: String, isGroup: Boolean) = {
-  # params format: name:xxx|desc:xxx|collection:xxx|original:xxx|preview:xxx|amount:xxx(only for group)
-  let parsedParams = params.split("|")
+  # params format: name::xxx||desc::xxx||collection::xxx||original::xxx||preview::xxx||amount::xxx(only for group)
+  let parsedParams = params.split("||")
   # let f = if (parsedParams.size() < 4) then throw("Wrong call params") else unit
 
   let nftName = checkName(getParamByKey("name", parsedParams))
   let nftDesc = getParamByKey("desc", parsedParams)
-  let collectionName = getParamByKey("collecion", parsedParams)
+  let collectionName = getParamByKey("collection", parsedParams)
 
   let origFile = getParamByKey("original", parsedParams)
   let preview = getParamByKey("preview", parsedParams)
