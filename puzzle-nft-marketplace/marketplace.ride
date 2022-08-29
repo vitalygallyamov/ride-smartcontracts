@@ -1,4 +1,4 @@
-{-# STDLIB_VERSION 5 #-}
+{-# STDLIB_VERSION 6 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
@@ -165,17 +165,45 @@ func buyNFT(nftId: String) = {
     }
 
     if (pmt.assetId == buyOutAssetId) then {
-      ([
-        ScriptTransfer(i.caller, 1, nftAsset.id),
+      let isGroup = getBoolean(Address(createNftDapp), "nft_" + nftId + "_isGroup").valueOrElse(false)
+      if (!isGroup) then {
+        ([
+          ScriptTransfer(i.caller, 1, nftAsset.id),
 
-        DeleteEntry("nft_" + nftId + "_buyOutPrice"),
-        DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
-        DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
-        DeleteEntry("nft_" + nftId + "_seller"),
-        DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
-        DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
-        DeleteEntry(auctionKey)
-      ] ++ transferFees ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftAsset.id.toBase58String())
+          DeleteEntry("nft_" + nftId + "_buyOutPrice"),
+          DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
+          DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+          DeleteEntry("nft_" + nftId + "_seller"),
+          DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
+          DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
+          DeleteEntry(auctionKey)
+        ] ++ transferFees ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftAsset.id.toBase58String())
+      } else {
+        strict newNFTIdStr = match invoke(Address(createNftDapp), "mintFromGroup", [nftId], []) {
+          case s:String => s
+          case _ => throw("Somthing wrong when mint multiple NFT")
+        }
+        strict groupAvailable = getInteger(Address(createNftDapp), "group_" + nftId + "_available").value()
+        #strict groupSize = getInteger(Address(createNftDapp), "group_" + nftId + "_size").value()
+        if (groupAvailable == 0) then {
+          strict inv = invoke(Address(createNftDapp), "burnNFT", [], [AttachedPayment(nftId.fromBase58String(), 1)])
+          ([
+            ScriptTransfer(i.caller, 1, newNFTIdStr.fromBase58String()),
+
+            DeleteEntry("nft_" + nftId + "_buyOutPrice"),
+            DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
+            DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+            DeleteEntry("nft_" + nftId + "_seller"),
+            DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
+            DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
+            DeleteEntry(auctionKey)
+          ] ++ transferFees, newNFTIdStr)
+        } else {
+          ([
+            ScriptTransfer(i.caller, 1, newNFTIdStr.fromBase58String())
+          ] ++ transferFees, newNFTIdStr)
+        }
+      }
     } else throw("The buyout asset does not match the purchase asset")
   } else throw("Payment amount must be greater than zero")
 }
@@ -247,7 +275,9 @@ func like(nftId: String) = {
 
 @Callable(i)
 func placeBid(nftId: String) = {
-  if (i.payments[0].amount > 0 &&
+  let isGroup = getBoolean(Address(createNftDapp), "nft_" + nftId + "_isGroup").valueOrElse(false)
+  if (isGroup) then throw("This function is not temporarily available for multiple NFTs")
+  else if (i.payments[0].amount > 0 &&
     (!i.payments[0].assetId.isDefined() || !isNFT(assetInfo(i.payments[0].assetId.value()).value()))) then {
 
     let nftAsset = tryGetAssetInfo(nftId, "NFT not found")

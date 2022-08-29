@@ -134,7 +134,7 @@ func mint(params: String, isGroup: Boolean) = {
         case x:Int => x
         case _ => 0
       }
-      if (collectionAmount > 1) then {
+      if (collectionAmount > 1 && collectionAmount <= 1000000) then {
         let collectionDomain = i.caller.toString() + "_" + collectionName
 
         ([
@@ -151,7 +151,7 @@ func mint(params: String, isGroup: Boolean) = {
           asset,
           ScriptTransfer(i.caller, 1, assetId)
         ], assetIdStr)
-      } else throw("When creating a multiple collection, the number must be greater than 1")
+      } else throw("When creating a multiple collection, the number must be greater than 1 and less 1000000")
       
     }
   }
@@ -159,7 +159,7 @@ func mint(params: String, isGroup: Boolean) = {
 
 @Callable(i)
 func mintFromGroup(groupAssetIdStr: String) = {
-  let groupAsset = assetInfo(groupAssetIdStr.fromBase16String()).value()
+  let groupAsset = assetInfo(groupAssetIdStr.fromBase58String()).value()
 
   if (groupAsset.checkNFT()) then {
     if (i.caller == marketplaceContractAddress) then {
@@ -176,26 +176,6 @@ func mintFromGroup(groupAssetIdStr: String) = {
 
           let nftNum = tryGetInteger("collection_" + collectionDomain + "_size") + 1
 
-          # update group state
-          let groupUpdateState = if (groupAvailable > 1) then {
-            [
-              IntegerEntry("group_" + groupAssetIdStr + "_available", groupAvailable - 1)
-            ]
-          } else {
-            [
-              DeleteEntry("nft_" + groupAssetIdStr + "_data"),
-              DeleteEntry("nft_" + groupAssetIdStr + "_image"),
-              DeleteEntry("nft_" + groupAssetIdStr + "_original"),
-              DeleteEntry("nft_" + groupAssetIdStr + "_issuer"),
-              DeleteEntry("nft_" + groupAssetIdStr + "_isGroup"),
-
-              DeleteEntry("group_" + groupAssetIdStr + "_size"),
-              DeleteEntry("group_" + groupAssetIdStr + "_available"),
-              DeleteEntry("group_" + groupAssetIdStr + "_collectionDomain"),
-              Burn(groupAssetIdStr.fromBase58String(), 1)
-            ]
-          }
-
           # issue NFT
           let asset = Issue(groupAsset.name, groupAsset.description, 1, 0, false, unit, 0)
           let assetId = asset.calculateAssetId()
@@ -210,9 +190,11 @@ func mintFromGroup(groupAssetIdStr: String) = {
             IntegerEntry("collection_" + collectionDomain + "_size", nftNum),
             StringEntry("collection_" + collectionDomain + "_assetId_" + assetIdStr, assetIdStr),
 
+            IntegerEntry("group_" + groupAssetIdStr + "_available", groupAvailable - 1),
+
             asset,
             ScriptTransfer(i.caller, 1, assetId)
-          ] ++ groupUpdateState, assetIdStr)
+          ], assetIdStr)
         } else throw("Mint not available")
       } else throw("Invalid NFT identifier")
     } else throw("Invalid caller address")
