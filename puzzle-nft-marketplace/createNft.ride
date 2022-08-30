@@ -199,8 +199,8 @@ func mintFromGroup(groupAssetIdStr: String) = {
             ScriptTransfer(i.caller, 1, assetId)
           ]
 
-          if (randIndexList.size() > 0 && sourceList.size() > 0) then {
-            if (groupAvailable == 0 || randIndexList.size() == 0 || sourceList.size() == 0) then throw("Mint not available")
+          if (sourceList.size() > 0) then {
+            if (randIndexList.size() == 0) then throw("Mint not available")
             else {
               let rand = getRandomNumber(groupAvailable, i.transactionId, height, 0)
               let randIndex = parseInt(randIndexList[rand]).valueOrErrorMessage("Invalid rand index")
