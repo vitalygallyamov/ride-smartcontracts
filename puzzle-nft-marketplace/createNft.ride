@@ -59,6 +59,12 @@ func getParamByKey(key: String, params: List[String]) = {
   FOLD<10>(params, "", find)
 }
 
+# for generation random digit
+func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset*8) % variants
+}
 
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
@@ -88,24 +94,22 @@ func createNFT(nftName: String, nftDesc: String, image: String, collectionName: 
 }
 
 @Callable(i)
-func mint(params: String, isGroup: Boolean) = {
+func mint(name: String, desc: String, collection: String, preview: String, original: String, amount: Int, sourceList: String, randIndexList: String) = {
   # params format: name::xxx||desc::xxx||collection::xxx||original::xxx||preview::xxx||amount::xxx(only for group)
-  let parsedParams = params.split("||")
+  # let parsedParams = params.split("||")
   # let f = if (parsedParams.size() < 4) then throw("Wrong call params") else unit
 
-  let nftName = checkName(getParamByKey("name", parsedParams))
-  let nftDesc = getParamByKey("desc", parsedParams)
-  let collectionName = getParamByKey("collection", parsedParams)
+  let nftName = checkName(name)
+  let nftDesc = desc
+  let collectionName = collection
 
-  let origFile = getParamByKey("original", parsedParams)
-  let preview = getParamByKey("preview", parsedParams)
-  let previewFile = if (preview.size() > 0) then preview else origFile
+  let previewFile = if (preview.size() > 0) then preview else original
 
   if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then
     throw("issuance of new NFTs is limited")
   else if (collectionName.size() == 0) then
     throw("Incorrect collection name")
-  else if (origFile.indexOf("https://") != 0 || previewFile.indexOf("https://") != 0) then {
+  else if (original.indexOf("https://") != 0 || previewFile.indexOf("https://") != 0) then {
     throw("https link to file required")
   } else {
     let asset = Issue(nftName, nftDesc, 1, 0, false, unit, 0)
@@ -113,14 +117,14 @@ func mint(params: String, isGroup: Boolean) = {
     let assetIdStr = assetId.toBase58String()
 
     # issue 1 nft
-    if (!isGroup) then {
+    if (amount == 1) then {
       let collectionDomain = i.caller.toString() + "_" + if (collectionName.size() > 0) then {collectionName} else {"basic"}
       let nftNum = tryGetInteger("collection_" + collectionDomain + "_size") + 1
 
       ([
         StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"', 'num': "+nftNum.toString()+"}"),
         StringEntry("nft_" + assetIdStr + "_image", previewFile),
-        StringEntry("nft_" + assetIdStr + "_original", origFile),
+        StringEntry("nft_" + assetIdStr + "_original", original),
         StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
 
         IntegerEntry("collection_" + collectionDomain + "_size", nftNum),
@@ -129,31 +133,29 @@ func mint(params: String, isGroup: Boolean) = {
         asset,
         ScriptTransfer(i.caller, 1, assetId)
       ], assetIdStr)
-    } else { # issue 1 group nft
-      let collectionAmount = match parseInt(getParamByKey("amount", parsedParams)) {
-        case x:Int => x
-        case _ => 0
-      }
-      if (collectionAmount > 1 && collectionAmount <= 1000000) then {
+    } else if (amount > 1) then { # issue 1 group nft
+      if (amount <= 1000000) then {
         let collectionDomain = i.caller.toString() + "_" + collectionName
 
         ([
           StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"'}"),
           StringEntry("nft_" + assetIdStr + "_image", previewFile),
-          StringEntry("nft_" + assetIdStr + "_original", origFile),
+          StringEntry("nft_" + assetIdStr + "_original", original),
           StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
           BooleanEntry("nft_" + assetIdStr + "_isGroup", true),
 
-          IntegerEntry("group_" + assetIdStr + "_size", collectionAmount),
-          IntegerEntry("group_" + assetIdStr + "_available", collectionAmount),
+          IntegerEntry("group_" + assetIdStr + "_size", amount),
+          IntegerEntry("group_" + assetIdStr + "_available", amount),
           StringEntry("group_" + assetIdStr + "_collectionDomain", collectionDomain),
+
+          StringEntry("group_" + assetIdStr + "_sourceList", sourceList),
+          StringEntry("group_" + assetIdStr + "_randIndexList", randIndexList),
 
           asset,
           ScriptTransfer(i.caller, 1, assetId)
         ], assetIdStr)
       } else throw("When creating a multiple collection, the number must be greater than 1 and less 1000000")
-      
-    }
+    } else throw("Wrong amount argument")
   }
 }
 
@@ -181,10 +183,11 @@ func mintFromGroup(groupAssetIdStr: String) = {
           let assetId = asset.calculateAssetId()
           let assetIdStr = assetId.toBase58String()
 
-          ([
+          let randIndexList = getString("group_" + groupAssetIdStr + "_randIndexList").valueOrElse("").split(",")
+          let sourceList = getString("group_" + groupAssetIdStr + "_sourceList").valueOrElse("").split(",")
+
+          let commonState = [
             StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"', 'num': "+nftNum.toString()+"}"),
-            StringEntry("nft_" + assetIdStr + "_image", previewFile),
-            StringEntry("nft_" + assetIdStr + "_original", origFile),
             StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
 
             IntegerEntry("collection_" + collectionDomain + "_size", nftNum),
@@ -194,7 +197,26 @@ func mintFromGroup(groupAssetIdStr: String) = {
 
             asset,
             ScriptTransfer(i.caller, 1, assetId)
-          ], assetIdStr)
+          ]
+
+          if (randIndexList.size() > 0 && sourceList.size() > 0) then {
+            if (groupAvailable == 0 || randIndexList.size() == 0 || sourceList.size() == 0) then throw("Mint not available")
+            else {
+              let rand = getRandomNumber(groupAvailable, i.transactionId, height, 0)
+              let randIndex = parseInt(randIndexList[rand]).valueOrErrorMessage("Invalid rand index")
+
+              (commonState ++ [
+                StringEntry("nft_" + assetIdStr + "_image", sourceList[randIndex]),
+                # StringEntry("nft_" + assetIdStr + "_original", sourceList[randIndex]),
+                StringEntry("group_" + groupAssetIdStr + "_randIndexList", makeString(randIndexList.removeByIndex(rand), ","))
+              ], assetIdStr)
+            }
+          } else {
+            (commonState ++ [
+              StringEntry("nft_" + assetIdStr + "_image", previewFile),
+              StringEntry("nft_" + assetIdStr + "_original", origFile)
+            ], assetIdStr)
+          }
         } else throw("Mint not available")
       } else throw("Invalid NFT identifier")
     } else throw("Invalid caller address")
@@ -251,7 +273,10 @@ func burnNFT() = {
 
         DeleteEntry("group_" + assetIdStr + "_size"),
         DeleteEntry("group_" + assetIdStr + "_available"),
-        DeleteEntry("group_" + assetIdStr + "_collectionDomain")
+        DeleteEntry("group_" + assetIdStr + "_collectionDomain"),
+
+        DeleteEntry("group_" + assetIdStr + "_sourceList"),
+        DeleteEntry("group_" + assetIdStr + "_randIndexList")
       ]
     }
   } else throw("Ivalid NFT attached")
