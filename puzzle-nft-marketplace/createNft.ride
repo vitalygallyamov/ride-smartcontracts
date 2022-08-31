@@ -97,14 +97,10 @@ func createNFT(nftName: String, nftDesc: String, image: String, collectionName: 
 
 @Callable(i)
 func mint(name: String, desc: String, collection: String, preview: String, original: String, amount: Int, sourceList: String, randIndexList: String) = {
-  # params format: name::xxx||desc::xxx||collection::xxx||original::xxx||preview::xxx||amount::xxx(only for group)
-  # let parsedParams = params.split("||")
-  # let f = if (parsedParams.size() < 4) then throw("Wrong call params") else unit
 
   let nftName = checkName(name)
   let nftDesc = desc
   let collectionName = collection
-
   let previewFile = if (preview.size() > 0) then preview else original
 
   if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then
