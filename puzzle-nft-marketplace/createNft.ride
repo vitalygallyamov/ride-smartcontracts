@@ -26,6 +26,8 @@ let issuersWhitelist = [
   "3PLu7coMNV4naCxWkRemqga6o9zUhQppxsA"  # winner
 ]
 
+let LIMIT_MINT_COPIES = 10000
+
 func tryGetInteger(key: String) = {
   match getInteger(this, key) {
       case b:Int => b
@@ -134,27 +136,39 @@ func mint(name: String, desc: String, collection: String, preview: String, origi
         ScriptTransfer(i.caller, 1, assetId)
       ], assetIdStr)
     } else if (amount > 1) then { # issue 1 group nft
-      if (amount <= 1000000) then {
+      if (amount <= LIMIT_MINT_COPIES) then {
         let collectionDomain = i.caller.toString() + "_" + collectionName
 
-        ([
-          StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"'}"),
-          StringEntry("nft_" + assetIdStr + "_image", previewFile),
-          StringEntry("nft_" + assetIdStr + "_original", original),
-          StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
-          BooleanEntry("nft_" + assetIdStr + "_isGroup", true),
+        let randData = if (randIndexList.size() > 0 && sourceList.size() > 0) then {
+          if (randIndexList.split(",").size() != amount) then throw("random list is not equal to the number of available elements")
+          else {
+            [
+              StringEntry("group_" + assetIdStr + "_sourceList", sourceList),
+              StringEntry("group_" + assetIdStr + "_randIndexList", randIndexList)
+            ]
+          }
+        } else if ((randIndexList.size() > 0 && sourceList.size() == 0) || (randIndexList.size() == 0 && sourceList.size() > 0)) then
+          throw("the list of resources or random sequence is not filled")
+        else []
 
-          IntegerEntry("group_" + assetIdStr + "_size", amount),
-          IntegerEntry("group_" + assetIdStr + "_available", amount),
-          StringEntry("group_" + assetIdStr + "_collectionDomain", collectionDomain),
+        if (randIndexList.split(",").size() != amount) then throw("random list is not equal to the number of available elements")
+        else {
+          ([
+            StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"'}"),
+            StringEntry("nft_" + assetIdStr + "_image", previewFile),
+            StringEntry("nft_" + assetIdStr + "_original", original),
+            StringEntry("nft_" + assetIdStr + "_issuer", i.caller.toString()),
+            BooleanEntry("nft_" + assetIdStr + "_isGroup", true),
 
-          StringEntry("group_" + assetIdStr + "_sourceList", sourceList),
-          StringEntry("group_" + assetIdStr + "_randIndexList", randIndexList),
+            IntegerEntry("group_" + assetIdStr + "_size", amount),
+            IntegerEntry("group_" + assetIdStr + "_available", amount),
+            StringEntry("group_" + assetIdStr + "_collectionDomain", collectionDomain),
 
-          asset,
-          ScriptTransfer(i.caller, 1, assetId)
-        ], assetIdStr)
-      } else throw("When creating a multiple collection, the number must be greater than 1 and less 1000000")
+            asset,
+            ScriptTransfer(i.caller, 1, assetId)
+          ] ++ randData, assetIdStr)
+        }
+      } else throw("When creating a multiple collection, the number must be greater than 1 and less or equal " + LIMIT_MINT_COPIES.toString())
     } else throw("Wrong amount argument")
   }
 }
