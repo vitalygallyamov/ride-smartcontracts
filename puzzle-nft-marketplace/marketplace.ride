@@ -79,13 +79,14 @@ func allTransfersForBid(nftId: String, exclude: String) = {
 }
 
 @Callable(i)
-func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
+func sellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: String) = {
 
   let pmt = if i.payments.size() == 1 && i.payments[0].amount == 1
     then i.payments[0]
     else throw("NFT not listed as payment")
 
-  let buyOutAsset = buyOutAssetId.getAssetBytes()
+  let isFree = buyOutAssetId == "free"
+  let buyOutAsset = if (isFree) then unit else buyOutAssetId.getAssetBytes()
 
   if (isDefined(pmt.assetId)) then {
     let nftId = value(pmt.assetId)
@@ -95,7 +96,7 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
     }
 
     if (checkNFT(nft)) then {
-      if (buyOutPrice > 0) then {
+      if (isFree || buyOutPrice > 0) then {
 
         let assetNameStr = toBase58String(nft.id)
         let nftIssuer = match getString(Address(createNftDapp), "nft_" + assetNameStr + "_issuer") {
@@ -109,9 +110,10 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String) = {
         }
         
         [
-          IntegerEntry("nft_" + assetNameStr + "_buyOutPrice", buyOutPrice),
-          StringEntry("nft_" + assetNameStr + "_buyOutAssetId", buyOutAsset.getAssetString()),
+          IntegerEntry("nft_" + assetNameStr + "_buyOutPrice", if (isFree) then 0 else buyOutPrice),
+          StringEntry("nft_" + assetNameStr + "_buyOutAssetId", if (isFree) then "free" else buyOutAsset.getAssetString()),
           StringEntry("nft_" + assetNameStr + "_royaltyReceiver", royaltyReceiver),
+          StringEntry("nft_" + assetNameStr + "_sellerComment", sellerComment),
           StringEntry("nft_" + assetNameStr + "_seller", i.originCaller.toString()),
           StringEntry("address_" + i.originCaller.toString() + "_nft_" + assetNameStr, assetNameStr),
           IntegerEntry("address_" + i.originCaller.toString() + "_nft_" + assetNameStr + "_startSaleAt", height)
@@ -133,8 +135,9 @@ func buyNFT(nftId: String) = {
   let royaltyReceiver = tryGetString("nft_" + nftId + "_royaltyReceiver")
   let sellerStr = tryGetString("nft_" + nftId + "_seller")
 
+  let isFree = buyOutAssetIdStr == "free"
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
-  let buyOutAssetId = if (buyOutAssetIdStr == "WAVES") then {unit} else {
+  let buyOutAssetId = if (isFree || buyOutAssetIdStr == "WAVES") then {unit} else {
     match assetInfo(buyOutAssetIdStr.fromBase58String()) {
       case a:Asset => a.id
       case _ => throw("Buyout asset not found")
@@ -142,7 +145,7 @@ func buyNFT(nftId: String) = {
   }
   let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
-  if (buyOutPrice > 0 && pmt.amount >= buyOutPrice) then {
+  if ((isFree && buyOutPrice == 0) || (buyOutPrice > 0 && pmt.amount >= buyOutPrice)) then {
 
     # if duck nft, send fee to ducks
     let duckNftId = getString(Address(nftDuckWrapper), "nft_" + nftId + "_duckId").valueOrElse("")
@@ -164,7 +167,7 @@ func buyNFT(nftId: String) = {
       ]
     }
 
-    if (pmt.assetId == buyOutAssetId) then {
+    if (isFree || pmt.assetId == buyOutAssetId) then {
       let isGroup = getBoolean(Address(createNftDapp), "nft_" + nftId + "_isGroup").valueOrElse(false)
       if (!isGroup) then {
         ([
@@ -173,6 +176,7 @@ func buyNFT(nftId: String) = {
           DeleteEntry("nft_" + nftId + "_buyOutPrice"),
           DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
           DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+          DeleteEntry("nft_" + nftId + "_sellerComment"),
           DeleteEntry("nft_" + nftId + "_seller"),
           DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
           DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
@@ -193,6 +197,7 @@ func buyNFT(nftId: String) = {
             DeleteEntry("nft_" + nftId + "_buyOutPrice"),
             DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
             DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+            DeleteEntry("nft_" + nftId + "_sellerComment"),
             DeleteEntry("nft_" + nftId + "_seller"),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
@@ -222,6 +227,7 @@ func cancelSell(nftId: String) = {
       DeleteEntry("nft_" + nftId + "_buyOutPrice"),
       DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+      DeleteEntry("nft_" + nftId + "_sellerComment"),
       DeleteEntry("nft_" + nftId + "_seller"),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
@@ -399,6 +405,7 @@ func acceptBid(nftId: String, betId: String) = {
             DeleteEntry("nft_" + nftId + "_buyOutPrice"),
             DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
             DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
+            DeleteEntry("nft_" + nftId + "_sellerComment"),
             DeleteEntry("nft_" + nftId + "_seller"),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
