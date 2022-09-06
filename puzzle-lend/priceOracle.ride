@@ -1,0 +1,127 @@
+{-# STDLIB_VERSION 6 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let wxProviderAddress = Address(base58'')
+let wavesCapProviderAddress = Address(base58'')
+
+let whiteList = [
+  wxProviderAddress,
+  wavesCapProviderAddress
+]
+
+func getPriceProviderID(address: Address) = {
+  if (address == wxProviderAddress) then "WX"
+  else if(address == wavesCapProviderAddress) then "WavesCap"
+  else unit
+}
+
+let lastUpdatedBlockKey = "lastUpdatedBlock"
+
+# Find price by type and block number
+# type: tokenId - Asset Id
+# type: type - Type of price value (minPrce, maxPrice)
+# type: block - Block number, if unit, then get block nuber from state (lastUpdatedBlock)
+func getPriceValue(tokenId: String, type: String, block: Int|Unit) = {
+    let nBlock = match (block) {
+        case t:Int => t
+        case _ => getIntegerValue(lastUpdatedBlockKey)
+    }
+    if (nBlock <= 0) then throw("Invalid block value")
+    else {
+      let blockProvidersKey = "providers_" + nBlock.toString()
+      let blockProvidersList = getString(blockProvidersKey).valueOrErrorMessage("Price provider not founeded for block " + nBlock.toString()).split(",")
+
+      func getProviderPrices(accum: List[Int], providerID: String) = {
+        if (providerID.size() > 0) then {
+          accum :+ getInteger("block_" + nBlock.toString() + "_provider_" + providerID + "_" + type + "_" + tokenId)
+        } else accum
+      }
+
+      let priceList = FOLD<100>(blockProvidersList, [], getProviderPrices)
+
+      if (priceList.size() == 0) then throw("Price not founded for providers")
+      else if (type == "minPrice") then priceList.min()
+      else if (type == "maxPrice") then priceList.max()
+      else throw("Wrong type name")
+    }
+}
+
+func getPriceDataEntries(priceList: List[String], height: Int, providerID: String) = {
+  func processList(accum: List[IntegerEntry], next: String) = {
+    let parsed = next.split("_")
+    # parsed[0] - tokenID
+    # parsed[1] - price
+    let tokenId = parsed[0]
+    let newPrice = parseInt(parsed[1]).valueOrErrorMessage("Invalid value parsed price")
+
+    let keyMinPrice = "block_" + height.toString() + "_provider_" + providerID + "_minPrice" + tokenId
+    let keyMaxPrice = "block_" + height.toString() + "_provider_" + providerID + "_maxPrice" + tokenId
+
+    let currentMinPrice = getInteger(keyMinPrice).valueOrElse(0)
+    let currentMaxPrice = getInteger(keyMaxPrice).valueOrElse(0)
+
+    if (newPrice <= 0) then throw("Price cannot be zero or less zero")
+    else if (tokenId.size() == 0) then throw("Inavalid value token Id")
+    else if (newPrice < currentMinPrice.value()) then {
+      accum :+ IntegerEntry(keyMinPrice, newPrice)
+    } else if (newPrice > currentMaxPrice.value()) then {
+      accum :+ IntegerEntry(keyMaxPrice, newPrice)
+    } else {
+      accum
+    }
+  }
+
+  FOLD<100>(priceList, [], processList)
+}
+
+# price list item format: token_pirce
+@Callable(i)
+func updatePrice(prices: List[String]) = {
+  if (whiteList.indexOf(i.caller) == unit) then throw("Access denied")
+  else if (prices.size() == 0) then throw("Price list is empty")
+  else {
+    let providerID = match getPriceProviderID(i.caller) {
+      case p:String => p
+      case _ => throw("Provider ID not found")
+    }
+
+    # process provider ID
+    let blockProvidersKey = "providers_" + height.toString()
+    let blockProvidersStr = getString(blockProvidersKey).valueOrElse("")
+    let blockProvidersList = blockProvidersStr.split(",")
+    let blockProvidersData = match blockProvidersList.indexOf(providerID) {
+      case l:Int => []
+      case _ => [StringEntry(blockProvidersKey, (blockProvidersList ++ [providerID]).makeString(","))]
+    }
+
+    [
+      IntegerEntry(lastUpdatedBlockKey, height)
+    ] 
+    ++ blockProvidersData
+    ++ getPriceDataEntries(prices, height, providerID)
+  }
+}
+
+@Callable(i)
+func getPrice(tokenId: String) = {
+  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
+
+  # todo: add pools value
+  ([], (getPriceValue(tokenId, "minPrice", unit), getPriceValue(tokenId, "maxPrice", unit)))
+}
+
+@Callable(i)
+func getPriceAt(block: Int, tokenId: String) = {
+  # todo: add pools value
+  ([], (getPriceValue(tokenId, "minPrice", block), getPriceValue(tokenId, "maxPrice", block)))
+}
+
+@Callable(i)
+func getTWAP(n: Int, tokenId: String) = {
+  []
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
