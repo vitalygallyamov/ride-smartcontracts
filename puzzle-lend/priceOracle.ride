@@ -2,12 +2,20 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
+let wxProviderPubKey = base58''
+let wavesCapProviderPubKey = base58''
+
 let wxProviderAddress = Address(base58'')
 let wavesCapProviderAddress = Address(base58'')
 
-let whiteList = [
+let whiteListAddresses = [
   wxProviderAddress,
   wavesCapProviderAddress
+]
+
+let whiteListPubKeys = [
+  wxProviderPubKey,
+  wavesCapProviderPubKey
 ]
 
 func getPriceProviderID(address: Address) = {
@@ -17,6 +25,9 @@ func getPriceProviderID(address: Address) = {
 }
 
 let lastUpdatedBlockKey = "lastUpdatedBlock"
+
+let n15List = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+let n60List = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 
 # Find price by type and block number
 # type: tokenId - Asset Id
@@ -29,16 +40,21 @@ func getPriceValue(tokenId: String, type: String, block: Int|Unit) = {
     }
     if (nBlock <= 0) then throw("Invalid block value")
     else {
-      let blockProvidersKey = "providers_" + nBlock.toString()
+      let blockProvidersKey = "providers"
       let blockProvidersList = getString(blockProvidersKey).valueOrErrorMessage("Price provider not founeded for block " + nBlock.toString()).split(",")
 
       func getProviderPrices(accum: List[Int], providerID: String) = {
         if (providerID.size() > 0) then {
-          accum :+ getInteger("block_" + nBlock.toString() + "_provider_" + providerID + "_" + type + "_" + tokenId)
+          let priceValue = getInteger("block_" + nBlock.toString() + "_provider_" + providerID + "_" + type + "_" + tokenId).valueOrElse(0)
+          if (priceValue > 0) then {
+            accum :+ priceValue
+          } else {
+            accum
+          }
         } else accum
       }
 
-      let priceList = FOLD<100>(blockProvidersList, [], getProviderPrices)
+      let priceList = FOLD<10>(blockProvidersList, [], getProviderPrices)
 
       if (priceList.size() == 0) then throw("Price not founded for providers")
       else if (type == "minPrice") then priceList.min()
@@ -55,8 +71,8 @@ func getPriceDataEntries(priceList: List[String], height: Int, providerID: Strin
     let tokenId = parsed[0]
     let newPrice = parseInt(parsed[1]).valueOrErrorMessage("Invalid value parsed price")
 
-    let keyMinPrice = "block_" + height.toString() + "_provider_" + providerID + "_minPrice" + tokenId
-    let keyMaxPrice = "block_" + height.toString() + "_provider_" + providerID + "_maxPrice" + tokenId
+    let keyMinPrice = "block_" + height.toString() + "_provider_" + providerID + "_minPrice_" + tokenId
+    let keyMaxPrice = "block_" + height.toString() + "_provider_" + providerID + "_maxPrice_" + tokenId
 
     let currentMinPrice = getInteger(keyMinPrice).valueOrElse(0)
     let currentMaxPrice = getInteger(keyMaxPrice).valueOrElse(0)
@@ -78,7 +94,7 @@ func getPriceDataEntries(priceList: List[String], height: Int, providerID: Strin
 # price list item format: token_pirce
 @Callable(i)
 func updatePrice(prices: List[String]) = {
-  if (whiteList.indexOf(i.caller) == unit) then throw("Access denied")
+  if (whiteListAddresses.indexOf(i.caller) == unit) then throw("Access denied")
   else if (prices.size() == 0) then throw("Price list is empty")
   else {
     let providerID = match getPriceProviderID(i.caller) {
@@ -87,18 +103,18 @@ func updatePrice(prices: List[String]) = {
     }
 
     # process provider ID
-    let blockProvidersKey = "providers_" + height.toString()
-    let blockProvidersStr = getString(blockProvidersKey).valueOrElse("")
-    let blockProvidersList = blockProvidersStr.split(",")
-    let blockProvidersData = match blockProvidersList.indexOf(providerID) {
-      case l:Int => []
-      case _ => [StringEntry(blockProvidersKey, (blockProvidersList ++ [providerID]).makeString(","))]
-    }
+    # let blockProvidersKey = "providers_" + height.toString()
+    # let blockProvidersStr = getString(blockProvidersKey).valueOrElse("")
+    # let blockProvidersList = blockProvidersStr.split(",")
+    # let blockProvidersData = match blockProvidersList.indexOf(providerID) {
+    #   case l:Int => []
+    #   case _ => [StringEntry(blockProvidersKey, (blockProvidersList ++ [providerID]).makeString(","))]
+    # }
 
     [
       IntegerEntry(lastUpdatedBlockKey, height)
     ] 
-    ++ blockProvidersData
+    # ++ blockProvidersData
     ++ getPriceDataEntries(prices, height, providerID)
   }
 }
@@ -118,10 +134,94 @@ func getPriceAt(block: Int, tokenId: String) = {
 }
 
 @Callable(i)
-func getTWAP(n: Int, tokenId: String) = {
-  []
+func getTWAP60(tokenId: String) = {
+  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
+
+  # get list max and min prices for 60 blocks
+  func getMinPrice(accum: (List[Int], Int), next: Int) = {
+    let (result, block) = accum
+    (result :+ getPriceValue(tokenId, "minPrice", block), block - next)
+  }
+  func getMaxPrice(accum: (List[Int], Int), next: Int) = {
+    let (result, block) = accum
+    (result :+ getPriceValue(tokenId, "maxPrice", block), block - next)
+  }
+  let minPricesList = FOLD<60>(n60List, ([], lastUpdatedBlock), getMinPrice)
+  let maxPricesList = FOLD<60>(n60List, ([], lastUpdatedBlock), getMaxPrice)
+
+  # calc min max sum prices
+  func sum(accum: Int, next: Int) = accum + next
+  let minSum = FOLD<60>(minPricesList._1, 0, sum)
+  let maxSum = FOLD<60>(maxPricesList._1, 0, sum)
+
+  # calc min max average
+  let minAverage = fraction(minSum, 1_000_000, minPricesList.size())
+  let maxAverage = fraction(maxSum, 1_000_000, minPricesList.size())
+
+  ([], (minAverage, maxAverage))
+}
+
+@Callable(i)
+func getTWAP15(tokenId: String) = {
+  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
+
+  # get list max and min prices for 15 blocks
+  func getMinPrice(accum: (List[Int], Int), next: Int) = {
+    let (result, block) = accum
+    (result :+ getPriceValue(tokenId, "minPrice", block), block - next)
+  }
+  func getMaxPrice(accum: (List[Int], Int), next: Int) = {
+    let (result, block) = accum
+    (result :+ getPriceValue(tokenId, "maxPrice", block), block - next)
+  }
+  let minPricesList = FOLD<15>(n15List, ([], lastUpdatedBlock), getMinPrice)
+  let maxPricesList = FOLD<15>(n15List, ([], lastUpdatedBlock), getMaxPrice)
+
+  # calc min max sum prices
+  func sum(accum: Int, next: Int) = accum + next
+  let minSum = FOLD<15>(minPricesList._1, 0, sum)
+  let maxSum = FOLD<15>(maxPricesList._1, 0, sum)
+
+  # calc min max average
+  let minAverage = fraction(minSum, 1_000_000, minPricesList.size())
+  let maxAverage = fraction(maxSum, 1_000_000, minPricesList.size())
+
+  ([], (minAverage, maxAverage))
 }
 
 @Verifier(tx)
-func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+func verify() = {
+  
+  let pubKeyForDataTx = match(whiteListPubKeys.indexOf(tx.senderPublicKey)) {
+    case p:Int => p
+    case _ => tx.senderPublicKey
+  }
+
+  func checkData(dTx: DataTransaction, providerID: String) = {
+    func valid(accum: Boolean, next: BinaryEntry|BooleanEntry|DeleteEntry|IntegerEntry|StringEntry) = {
+      match next {
+        case t:IntegerEntry => {
+          if (accum) then {
+            # "block_" + height.toString() + "_provider_" + providerID + "_minPrice_" + tokenId
+            let validKey = match t.key.indexOf("block_" + height.toString() + "_provider_" + providerID + "_minPrice_") {
+              case k:Int => true
+              case _ => false
+            }
+            (accum && validKey && t.value > 0)
+          } else {
+            accum
+          }
+        }
+        case _ => accum
+      }
+    }
+    if !FOLD<100>(dTx.data, true, valid) then throw("Invalid data") else true
+  }
+
+  match (tx) {
+    case t:DataTransaction =>
+        (sigVerify(tx.bodyBytes, tx.proofs[0], wxProviderPubKey) && checkData(t, "WX")) || sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+    case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+  }
+}
         
