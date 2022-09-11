@@ -24,6 +24,12 @@ func getPriceProviderID(address: Address) = {
   else unit
 }
 
+func getPriceProviderIDByPubKey(pubKey: ByteVector) = {
+  if (pubKey == wxProviderPubKey) then "WX"
+  else if(pubKey == wavesCapProviderPubKey) then "WavesCap"
+  else unit
+}
+
 let lastUpdatedBlockKey = "lastUpdatedBlock"
 
 let n15List = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
@@ -191,11 +197,6 @@ func getTWAP15(tokenId: String) = {
 
 @Verifier(tx)
 func verify() = {
-  
-  let pubKeyForDataTx = match(whiteListPubKeys.indexOf(tx.senderPublicKey)) {
-    case p:Int => p
-    case _ => tx.senderPublicKey
-  }
 
   func checkData(dTx: DataTransaction, providerID: String) = {
     func valid(accum: Boolean, next: BinaryEntry|BooleanEntry|DeleteEntry|IntegerEntry|StringEntry) = {
@@ -218,9 +219,25 @@ func verify() = {
     if !FOLD<100>(dTx.data, true, valid) then throw("Invalid data") else true
   }
 
+  func checkSig(accum: (ByteVector|Unit, Boolean), next: ByteVector) = {
+    if (!accum._2) then {
+      (next, sigVerify(tx.bodyBytes, tx.proofs[0], next))
+    } else accum
+  }
+
+  let validProvider = FOLD<10>(whiteListPubKeys, (unit, false), checkSig)
+
   match (tx) {
     case t:DataTransaction =>
-        (sigVerify(tx.bodyBytes, tx.proofs[0], wxProviderPubKey) && checkData(t, "WX")) || sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        {
+          match (validProvider._1) {
+            case v:ByteVector => {
+              let providerID = getPriceProviderIDByPubKey(v).valueOrErrorMessage("Provider ID not found")
+              validProvider._2 && checkData(t, providerID)
+            }
+            case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+          }
+        }
     case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
   }
 }
