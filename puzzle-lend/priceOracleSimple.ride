@@ -168,47 +168,37 @@ func getTWAP15(tokenId: String, debug: Boolean) = {
     ([], (minAverage, maxAverage))
 }
 
-# @Verifier(tx)
-# func verify() = {
-
-#   func checkData(dTx: DataTransaction) = {
-#     func valid(accum: Boolean, next: BinaryEntry|BooleanEntry|DeleteEntry|IntegerEntry|StringEntry) = {
-#       match next {
-#         case t:IntegerEntry => {
-#           if (accum) then {
-#             # "block_" + height.toString() + "_provider_" + providerID + "_minPrice_" + tokenId
-#             if (t.key == "lastUpdatedBlock") then {
-#               (accum && t.value > 0)
-#             } else {
-#               let validMinKey = match t.key.indexOf("block_" + height.toString() + "_min_") {
-#                 case k:Int => true
-#                 case _ => false
-#               }
-#               let validMaxKey = match t.key.indexOf("block_" + height.toString() + "_max_") {
-#                 case k:Int => true
-#                 case _ => false
-#               }
-#               (accum && (validMinKey || validMaxKey) && t.value > 0)
-#             }
-#           } else {
-#             accum
-#           }
-#         }
-#         case _ => accum
-#       }
-#     }
-#     if !FOLD<20>(dTx.data, true, valid) then throw("Invalid data") else true
-#   }
-
-#   match (tx) {
-#     case t:DataTransaction =>
-#       (sigVerify(tx.bodyBytes, tx.proofs[0], wcapPubKey) && checkData(t)) ||
-#       sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-#     case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-#   }
-
-#   sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-# }
-
 @Verifier(tx)
-func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+func verify() = {
+
+  func checkData(dTx: DataTransaction) = {
+    let dataSize = dTx.data.size()
+    func checkItem(item: BinaryEntry|BooleanEntry|DeleteEntry|IntegerEntry|StringEntry) = {
+      match(item) {
+        case d:IntegerEntry => d.value > 0
+        case _ => throw("Only integer data entries update via verifier")
+      }
+    }
+    dataSize > 1 &&
+    match(dTx.data[0]) {
+      case d:BooleanEntry => d.key == "update_via_verifier" && d.value
+      case _ => throw("invalid first key")
+    } &&
+    checkItem(dTx.data[1]) && 
+    if (dataSize == 3) then checkItem(dTx.data[2]) else true &&
+    if (dataSize == 4) then checkItem(dTx.data[3]) else true
+  }
+
+  match (tx) {
+    case t:DataTransaction => {
+      let pubKey = if (checkData(t)) then {
+        wcapPubKey
+      } else tx.senderPublicKey
+      sigVerify(tx.bodyBytes, tx.proofs[0], pubKey)
+    }
+    case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+  }
+}
+
+# @Verifier(tx)
+# func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
