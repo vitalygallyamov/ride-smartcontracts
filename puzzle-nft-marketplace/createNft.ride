@@ -24,7 +24,8 @@ let issuersWhitelist = [
   "3PKHFX6W4aAr1e1b8MUTz5HmdWVUcjWhgY4", # puzzle gang Alex Stanovoy
   "3PJVkx7XRo86zU88shLuKGmbRr7RkMSxjHj", # address from Ania
   "3PLu7coMNV4naCxWkRemqga6o9zUhQppxsA", # winner
-  "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG"  # alex nagorny
+  "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG", # alex nagorny
+  "3P5d8a1H2m2zFQakhaaow3uDE77UYLGd89v"  # pluto eagles
 ]
 
 let LIMIT_MINT_COPIES = 10000

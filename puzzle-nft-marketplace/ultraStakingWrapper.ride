@@ -132,7 +132,7 @@ func lock() = {
     strict reward = usdnBalanceAfter - usdnBalanceBefore
 
     let rewardHistory = getString("reward_history").valueOrElse("")
-    let updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower, assetId.toBase58String())
+    let updatedData = updateRewards(rewardHistory.split_4C(";"), reward, totalPower, assetId.toBase58String())
     let addData = if (rewardHistory.contains(assetId.toBase58String() + "_")) then {
       updatedData
     } else {
@@ -151,7 +151,7 @@ func lock() = {
         StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
         StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr),
         StringEntry("nft_" + fakeIssueIdStr + "_owner", i.originCaller.toString()),
-        StringEntry("reward_history", addData.makeString(";"))
+        StringEntry("reward_history", addData.makeString_2C(";"))
       ],
       fakeIssueIdStr
     )
@@ -181,7 +181,7 @@ func unlock() = {
     strict reward = usdnBalanceAfter - usdnBalanceBefore
 
     strict rewardHistory = getString("reward_history").valueOrElse("")
-    strict updatedData = updateRewards(rewardHistory.split(";"), reward, totalPower, originalNftAssetIdStr)
+    strict updatedData = updateRewards(rewardHistory.split_4C(";"), reward, totalPower, originalNftAssetIdStr)
 
     strict nftReward = originalNftAssetIdStr.getNftReward(rewardHistory).value() + originalNftAssetIdStr.calcAssetReward(reward, totalPower)
 
@@ -201,7 +201,7 @@ func unlock() = {
       DeleteEntry("nft_" + toBase58String(assetId) + "_caller"),
       DeleteEntry("nft_" + toBase58String(assetId) + "_owner"),
 
-      StringEntry("reward_history", updatedData.makeString(";"))
+      StringEntry("reward_history", updatedData.makeString_2C(";"))
     ] ++ rewardTransaction,
     originalNftAssetIdStr)
   }
