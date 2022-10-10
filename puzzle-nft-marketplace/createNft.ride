@@ -28,6 +28,10 @@ let issuersWhitelist = [
   "3P5d8a1H2m2zFQakhaaow3uDE77UYLGd89v"  # pluto eagles
 ]
 
+let editorsWhiteList = [
+  "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG" # alex nagorny
+]
+
 let LIMIT_MINT_COPIES = 10000
 
 func tryGetInteger(key: String) = {
@@ -292,6 +296,20 @@ func burnNFT() = {
       ]
     }
   } else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
+func editImageNFT(id: String, newImageUrl: String) = {
+  if (editorsWhiteList.indexOf(i.caller.toString()) == unit) then {throw("Editing NFTs is limited")}
+  else if (newImageUrl.indexOf("https://") != 0) then {throw("https link to image required")}
+  else {
+    let asset = assetInfo(id.fromBase58String()).valueOrErrorMessage("NFT not fouded")
+    let assetIdStr = asset.id.toBase58String()
+    let dataExist = getString("nft_" + assetIdStr + "_data").valueOrErrorMessage("NFT data not fouded")
+    [
+      StringEntry("nft_" + assetIdStr + "_image", newImageUrl)
+    ]
+  }
 }
 
 @Verifier(tx)
