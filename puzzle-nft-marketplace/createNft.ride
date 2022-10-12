@@ -32,6 +32,9 @@ let editorsWhiteList = [
   "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG" # alex nagorny
 ]
 
+let nftUltraStakingWrapper = Address(base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk')
+let nftWavesPunksWrapper = Address(base58'3PD1sd55PYzmGUrQ896Qt3uvdbtgjCVpajE')
+
 let LIMIT_MINT_COPIES = 10000
 
 func tryGetInteger(key: String) = {
@@ -52,10 +55,6 @@ func checkNFT(asset: Asset) = {
   asset.issuer.bytes == this.bytes && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
-func checkName(name: String) = {
-  if (name.size() > 0 && name.size() < 17) then name else throw("Wrong NFT name")
-}
-
 func getParamByKey(key: String, params: List[String]) = {
   func find(accum: String, next: String) = {
     if (accum.size() == 0) then {
@@ -74,9 +73,46 @@ func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int,
   randomHash.toInt(offset*8) % variants
 }
 
+func isSubString(str: String, subStr: String) = {
+  match (str.indexOf(subStr)) {
+    case t:Int => true
+    case _ => false
+  }
+}
+
+func isUltraStakingName(name: String) = {
+  if (name.isSubString("Bored Ania")) then true
+  else if (name.isSubString("Bored Ania #")) then true
+  else if (name.isSubString("PUZZLE Early Eag")) then true
+  else false
+}
+
+func isWavesPunksName(name: String) = {
+  if (name.isSubString("Memalien #")) then true
+  else if (name.isSubString("ZombiePunk #")) then true
+  else if (name.isSubString("MadPunk #")) then true
+  else if (name.isSubString("WavesPunk #")) then true
+  else false
+}
+
+func isValidName(name: String, caller: Address) = {
+  if (name.size() < 4 || name.size() > 16) then throw("Name must be between 4 and 16 characters")
+  else {
+    let allowCallers = [
+      nftUltraStakingWrapper,
+      nftWavesPunksWrapper
+    ]
+    match (allowCallers.indexOf(caller)) {
+      case t:Int => true
+      case _ => !isUltraStakingName(name) && !isWavesPunksName(name)
+    }
+  }
+}
+
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
-  if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
+  if (!nftName.isValidName(i.caller)) then {throw("Invalid nft name")}
+  else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
   else if (image.indexOf("https://") != 0) then {
     throw("https link to image required")
   } else {
@@ -104,19 +140,19 @@ func createNFT(nftName: String, nftDesc: String, image: String, collectionName: 
 @Callable(i)
 func mint(name: String, desc: String, collection: String, preview: String, original: String, amount: Int, sourceList: String, randIndexList: String) = {
 
-  let nftName = checkName(name)
   let nftDesc = desc
   let collectionName = collection
   let previewFile = if (preview.size() > 0) then preview else original
 
-  if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then
+  if (!name.isValidName(i.caller)) then {throw("Invalid nft name")}
+  else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then
     throw("issuance of new NFTs is limited")
   else if (collectionName.size() == 0) then
     throw("Incorrect collection name")
   else if (original.indexOf("https://") != 0 || previewFile.indexOf("https://") != 0) then {
     throw("https link to file required")
   } else {
-    let asset = Issue(nftName, nftDesc, 1, 0, false, unit, 0)
+    let asset = Issue(name, nftDesc, 1, 0, false, unit, 0)
     let assetId = asset.calculateAssetId()
     let assetIdStr = assetId.toBase58String()
 
