@@ -112,7 +112,7 @@ func isValidName(name: String, caller: Address) = {
 @Callable(i)
 func createNFT(nftName: String, nftDesc: String, image: String, collectionName: String) = {
   if (!nftName.isValidName(i.caller)) then {throw("Invalid nft name")}
-  else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
+  # else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then {throw("issuance of new NFTs is limited")}
   else if (image.indexOf("https://") != 0) then {
     throw("https link to image required")
   } else {
@@ -145,8 +145,7 @@ func mint(name: String, desc: String, collection: String, preview: String, origi
   let previewFile = if (preview.size() > 0) then preview else original
 
   if (!name.isValidName(i.caller)) then {throw("Invalid nft name")}
-  else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then
-    throw("issuance of new NFTs is limited")
+  # else if (issuersWhitelist.indexOf(i.caller.toString()) == unit) then throw("issuance of new NFTs is limited")
   else if (collectionName.size() == 0) then
     throw("Incorrect collection name")
   else if (original.indexOf("https://") != 0 || previewFile.indexOf("https://") != 0) then {
