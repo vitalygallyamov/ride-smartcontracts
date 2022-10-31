@@ -18,6 +18,11 @@ func getPriceDataKey(block: Int, type: String, tokenId: String) = {
     "block_" + block.toString() + "_" + type + "_" + tokenId
 }
 
+func getLastUpdatedBlock() = {
+  let lastUpdatedBlock = getInteger(lastUpdatedBlockKey).valueOrErrorMessage("Last updated block key not found")
+  if (height - lastUpdatedBlock > 10) then throw("The price has not been updated for a long time") else lastUpdatedBlock
+}
+
 # Find price by type and block number
 # type: tokenId - Asset Id
 # type: type - Type of price value (minPrce, maxPrice)
@@ -25,7 +30,7 @@ func getPriceDataKey(block: Int, type: String, tokenId: String) = {
 func getPriceValue(tokenId: String, type: String, block: Int|Unit) = {
     let nBlock = match (block) {
         case t:Int => t
-        case _ => getIntegerValue(lastUpdatedBlockKey)
+        case _ => getLastUpdatedBlock()
     }
     if (nBlock <= 0) then throw("Invalid block value")
     else {
@@ -67,22 +72,20 @@ func getPriceDataEntries(priceList: List[String], height: Int) = {
 }
 
 # price list item format: token_price
-@Callable(i)
-func updatePrice(prices: List[String]) = {
-  if (whiteListAddresses.indexOf(i.caller) == unit) then throw("Access denied")
-  else if (prices.size() == 0) then throw("Price list is empty")
-  else {
-    [
-      IntegerEntry(lastUpdatedBlockKey, height)
-    ] 
-    ++ getPriceDataEntries(prices, height)
-  }
-}
+# @Callable(i)
+# func updatePrice(prices: List[String]) = {
+#   if (whiteListAddresses.indexOf(i.caller) == unit) then throw("Access denied")
+#   else if (prices.size() == 0) then throw("Price list is empty")
+#   else {
+#     [
+#       IntegerEntry(lastUpdatedBlockKey, height)
+#     ] 
+#     ++ getPriceDataEntries(prices, height)
+#   }
+# }
 
 @Callable(i)
 func getPrice(tokenId: String, debug: Boolean) = {
-  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
-
   # todo: add pools value
   if (debug) then
     throw("min: " + getPriceValue(tokenId, "min", unit).toString() + ", max: " +getPriceValue(tokenId, "max", unit).toString())
@@ -101,7 +104,7 @@ func getPriceAt(block: Int, tokenId: String, debug: Boolean) = {
 
 @Callable(i)
 func getTWAP60(tokenId: String, debug: Boolean) = {
-  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
+  let lastUpdatedBlock = getLastUpdatedBlock()
 
   # get list max and min prices for 60 blocks
   func getPriceList(accum: (List[Int], Int, String), next: Int) = {
@@ -138,7 +141,7 @@ func getTWAP60(tokenId: String, debug: Boolean) = {
 
 @Callable(i)
 func getTWAP15(tokenId: String, debug: Boolean) = {
-  let lastUpdatedBlock = getIntegerValue(lastUpdatedBlockKey)
+  let lastUpdatedBlock = getLastUpdatedBlock()
 
   # get list max and min prices for 15 blocks
   func getPriceList(accum: (List[Int], Int, String), next: Int) = {
