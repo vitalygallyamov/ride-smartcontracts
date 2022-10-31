@@ -11,6 +11,7 @@ let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
 let nftUltraStakingWrapper = base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk'
 let nftWavesPunksWrapper = base58'3PD1sd55PYzmGUrQ896Qt3uvdbtgjCVpajE'
+let nftWavesLandsWrapper = base58'3PCW9q51iwFiaDZB8SSRgc7jqjYgTgQy5T3'
 
 # ducks contracts for create nft
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
@@ -24,6 +25,15 @@ let punksIssuerAddress = Address(base58'3P8rLVnwrTf4k5AB3emuduhZZb1yKcitTHy')
 let aliensIssuerAddress = Address(base58'3PBkrb5LrGDvCwkx4VHZzZkqMNvvGqrJJWj')
 let madPunksIssuerAddress = Address(base58'3PJXfYMavRVzBDXqsFfwkLdEV7yuF5RToya')
 let madPunks2IssuerAddress = Address(base58'3P8LcmWrr9SFrxwheZQENov5fPHEWtiwroN')
+
+# waves lands
+let wlIssuerAddress = Address(base58'3PLncXtS1U83D6cQbFD3H8rBHPLgzxSFKZ1')
+
+
+# check Waves Lands NFT
+func ifWavesLandsNFT(asset: Asset) = {
+  asset.issuer == wlIssuerAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
 
 # check signArt NFT
 func ifSignArtNft(asset: Asset) = {
@@ -71,6 +81,7 @@ func getAddressForWrap(asset: Asset) = {
   else if (asset.ifWavesPunksNft()) then Address(nftWavesPunksWrapper)
   else if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
   else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
+  else if(asset.ifWavesLandsNFT()) then Address(nftWavesLandsWrapper)
   else unit
 }
 
@@ -93,6 +104,11 @@ func getAddressForUnwrap(nftStr: String) = {
     case s: String => s.size() > 0
     case _ => false
   }
+
+  let isWavesLands = match (getString(Address(nftWavesLandsWrapper), "nft_" + nftStr + "_assetId")) {
+    case s: String => s.size() > 0
+    case _ => false
+  }
   
   if (isUltraStaking) then {
     Address(nftUltraStakingWrapper)
@@ -102,6 +118,8 @@ func getAddressForUnwrap(nftStr: String) = {
     Address(nftSignArtWrapper)
   } else if (isDuck) then {
     Address(nftDuckWrapper)
+  } else if (isWavesLands) then {
+    Address(nftWavesLandsWrapper)
   } else unit
 }
 

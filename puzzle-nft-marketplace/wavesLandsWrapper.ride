@@ -1,0 +1,79 @@
+{-# STDLIB_VERSION 6 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let wlNFTIssuer = Address(base58'3PLncXtS1U83D6cQbFD3H8rBHPLgzxSFKZ1')
+let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+
+# Check nft asset
+func isValidNftAsset(asset: Asset) = {
+  asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
+
+func getIssuerParams(asset: Asset) = {
+  if (asset.issuer == wlNFTIssuer) then {
+    # pattern 500_XL_BBBCDCFDBDDEDBDBBCDEDDDBB_Africa
+    let parts = asset.description.split("_")
+    let image = "https://api.waveslands.com/land/image/" + parts[2] + ".svg"
+    [asset.name, "#" + parts[0] + "\nSize: " + parts[1] + "\nCode: " + parts[2] + "\nContinent: " + parts[3], "WavesLands", "", image, 1, "", ""]
+  } else throw("Wrong NFT asset for issue")
+}
+
+@Callable(i)
+func lock() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].assetId.value()
+
+  let asset = assetInfo(assetId).value()
+
+  if (i.payments[0].amount == 1 && asset.isValidNftAsset()) then {
+
+    let issueParams = getIssuerParams(asset)
+
+    # try issue fake NFT for market
+    # TODO description
+    strict fakeIssueIdStr = match(invoke(createNFTAddress, "mint", issueParams, [])) {
+      case s:String => s
+      case _ => throw("Something went wrong during creation of NFT")
+    }
+    (
+      [
+        ScriptTransfer(i.caller, 1, fakeIssueIdStr.fromBase58String()),
+
+        StringEntry("nft_" + fakeIssueIdStr + "_assetId", toBase58String(asset.id)),
+        StringEntry("nft_" + fakeIssueIdStr + "_caller", addressStr)
+      ],
+      fakeIssueIdStr
+    )
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Callable(i)
+func unlock() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].assetId.value()
+
+  let callerAddress = getStringValue(this, "nft_" + toBase58String(assetId) + "_caller")
+  let originalNftAssetIdStr = getStringValue(this, "nft_" + toBase58String(assetId) + "_assetId")
+
+  let nftAsset = assetInfo(assetId).value()
+  if (i.payments[0].amount == 1 && nftAsset.isValidNftAsset() && addressStr == callerAddress) then {
+    
+    strict invBurn = invoke(createNFTAddress, "burnNFT", [], [i.payments[0]])
+    
+    ([
+      ScriptTransfer(i.caller, 1, originalNftAssetIdStr.fromBase58String()),
+
+      DeleteEntry("nft_" + toBase58String(assetId) + "_assetId"),
+      DeleteEntry("nft_" + toBase58String(assetId) + "_caller")
+    ],
+    originalNftAssetIdStr)
+  }
+  else throw("Ivalid NFT attached")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
