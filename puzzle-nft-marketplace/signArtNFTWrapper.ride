@@ -10,7 +10,7 @@ func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
 }
 
 func clearString(str: String) = {
-  str.split(" – ").makeString(" ")
+  str.split(" – ").makeString(" ").split("“").makeString(" ").split("”").makeString(" ")
 }
 
 @Callable(i)
