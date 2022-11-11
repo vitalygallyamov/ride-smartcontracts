@@ -55,17 +55,6 @@ func checkNFT(asset: Asset) = {
   asset.issuer.bytes == this.bytes && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
 }
 
-func getParamByKey(key: String, params: List[String]) = {
-  func find(accum: String, next: String) = {
-    if (accum.size() == 0) then {
-      let parsed = next.split("::")
-      if (parsed[0] == key) then parsed[1] else accum
-    } else accum
-  }
-
-  FOLD<10>(params, "", find)
-}
-
 # for generation random digit
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
@@ -231,8 +220,8 @@ func mintFromGroup(groupAssetIdStr: String) = {
           let assetId = asset.calculateAssetId()
           let assetIdStr = assetId.toBase58String()
 
-          let randIndexList = getString("group_" + groupAssetIdStr + "_randIndexList").valueOrElse("").split(",")
-          let sourceList = getString("group_" + groupAssetIdStr + "_sourceList").valueOrElse("").split(",")
+          let randIndexListStr = getString("group_" + groupAssetIdStr + "_randIndexList").valueOrElse("")
+          let sourceListStr = getString("group_" + groupAssetIdStr + "_sourceList").valueOrElse("")
 
           let commonState = [
             StringEntry("nft_" + assetIdStr + "_data", "{'collection': '"+collectionDomain+"', 'num': "+nftNum.toString()+"}"),
@@ -247,9 +236,12 @@ func mintFromGroup(groupAssetIdStr: String) = {
             ScriptTransfer(i.caller, 1, assetId)
           ]
 
-          if (sourceList.size() > 0) then {
-            if (randIndexList.size() == 0) then throw("Mint not available")
+          if (sourceListStr.size() > 0) then {
+            if (randIndexListStr.size() == 0) then throw("Mint not available")
             else {
+              let randIndexList = randIndexListStr.split(",")
+              let sourceList = sourceListStr.split(",")
+
               let rand = getRandomNumber(groupAvailable, i.transactionId, height, 0)
               let randIndex = parseInt(randIndexList[rand]).valueOrErrorMessage("Invalid rand index")
 
