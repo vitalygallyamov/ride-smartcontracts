@@ -1,4 +1,4 @@
-{-# STDLIB_VERSION 5 #-}
+{-# STDLIB_VERSION 6 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
@@ -10,7 +10,7 @@ func checkNFT(asset: Asset, issuerAddress: ByteVector) = {
 }
 
 func clearString(str: String) = {
-  str.split(" – ").makeString(" ").split("“").makeString(" ").split("”").makeString(" ")
+  str.split_4C(" – ").makeString_2C(" ").split_4C("“").makeString_2C(" ").split_4C("”").makeString_2C(" ")
 }
 
 @Callable(i)
