@@ -29,7 +29,8 @@ let issuersWhitelist = [
 ]
 
 let editorsWhiteList = [
-  "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG" # alex nagorny
+  "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG", # alex nagorny
+  "3P7NhmDt31ekQ2JryxtmdgZ1DXgVPwyocJK"
 ]
 
 let nftUltraStakingWrapper = Address(base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk')
