@@ -331,9 +331,9 @@ func editImageNFT(id: String, newImageUrl: String) = {
   else {
     let asset = assetInfo(id.fromBase58String()).valueOrErrorMessage("NFT not fouded")
     let alexandra = Address(base58'3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi')
-    let tsunamiIssuer = Address(base58'3PPLea51cvcmmLAhMqT7r4VmarDMf7Y5iVH')
-    if (i.caller == alexandra && asset.issuer != tsunamiIssuer) then
-      throw("Use only tsunami NFT")
+    let tsunamiIssuer = "3PPLea51cvcmmLAhMqT7r4VmarDMf7Y5iVH"
+    let assetIssuer = getString("nft_" + asset.id.toBase58String() + "_issuer").valueOrErrorMessage("Issuer not found")
+    if (i.caller == alexandra && assetIssuer != tsunamiIssuer) then throw("Use only tsunami NFT")
     else {
       let assetIdStr = asset.id.toBase58String()
       let dataExist = getString("nft_" + assetIdStr + "_data").valueOrErrorMessage("NFT data not fouded")
