@@ -31,7 +31,8 @@ let issuersWhitelist = [
 let editorsWhiteList = [
   "3PGKEe4y59V3WLnHwPEUaMWdbzy8sb982fG", # alex nagorny
   "3P7NhmDt31ekQ2JryxtmdgZ1DXgVPwyocJK",
-  "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi"  # alexandra only for tsunami NFTs
+  "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi", # alexandra only for tsunami NFTs
+  "3P6YATtrcTkMoEeuZVaUxnD99DuJeG15yao"  # tsunami team
 ]
 
 let nftUltraStakingWrapper = Address(base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk')
@@ -331,9 +332,10 @@ func editImageNFT(id: String, newImageUrl: String) = {
   else {
     let asset = assetInfo(id.fromBase58String()).valueOrErrorMessage("NFT not fouded")
     let alexandra = Address(base58'3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi')
+    let tsunamiMember = Address(base58'3P6YATtrcTkMoEeuZVaUxnD99DuJeG15yao')
     let tsunamiIssuer = "3PPLea51cvcmmLAhMqT7r4VmarDMf7Y5iVH"
     let assetIssuer = getString("nft_" + asset.id.toBase58String() + "_issuer").valueOrErrorMessage("Issuer not found")
-    if (i.caller == alexandra && assetIssuer != tsunamiIssuer) then throw("Use only tsunami NFT")
+    if ((i.caller == alexandra || i.caller == tsunamiMember) && assetIssuer != tsunamiIssuer) then throw("Use only tsunami NFT")
     else {
       let assetIdStr = asset.id.toBase58String()
       let dataExist = getString("nft_" + assetIdStr + "_data").valueOrErrorMessage("NFT data not fouded")
