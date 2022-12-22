@@ -1,0 +1,84 @@
+{-# STDLIB_VERSION 6 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let creationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+
+let totalStakedKey = "total_staked"
+let totalPowerKey = "total_power"
+
+# Check NFT and NFT issuer
+func checkNFT(asset: Asset) = {
+  getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_issuer") == this.toString() &&
+  asset.issuer == creationAddress &&
+  asset.decimals == 0 &&
+  asset.reissuable == false &&
+  asset.quantity == 1
+}
+
+func getPowerNFT(asset: Asset) = {
+  let params = getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_params")
+  if params == "gold" then 50 else 10
+}
+
+@Callable(i)
+func stake() = {
+  let addressStr = i.caller.toString()
+  let p = i.payments[0].valueOrErrorMessage("No payments")
+  let asset = assetInfo(p.assetId.valueOrErrorMessage("Invalid payment")).valueOrErrorMessage("Invalid asset Id")
+  if (p.amount > 0 && asset.checkNFT()) then {
+    # global params
+    let totalStaked = getInteger(totalStakedKey).valueOrElse(0)
+    let totalPower = getInteger(totalPowerKey).valueOrElse(0)
+
+    # address params
+    let addressPower = getInteger("address_" + addressStr + "_power").valueOrElse(0)
+
+    let nftPower = asset.getPowerNFT()
+
+    let nftIdStr = asset.id.toBase58String()
+    [
+      IntegerEntry(totalStakedKey, totalStaked + 1),
+      IntegerEntry(totalPowerKey, totalPower + nftPower),
+
+      StringEntry("nft_" + nftIdStr + "_owner", addressStr),
+      IntegerEntry("nft_" + nftIdStr + "_power", nftPower),
+
+      IntegerEntry("address_" + addressStr + "_power", addressPower + nftPower)
+    ]
+  }
+  else throw("No payments")
+}
+
+@Callable(i)
+func unstake(nftIdStr: String) = {
+  let addressStr = i.caller.toString()
+  let asset = assetInfo(nftIdStr.fromBase58String()).valueOrErrorMessage("Invalid nft Id")
+  let ownerAddress = getString("nft_" + nftIdStr + "_owner").valueOrErrorMessage("Owner data invalid")
+  if (ownerAddress != addressStr) then throw("You are not the owner")
+  else if (asset.checkNFT()) then {
+    # global params
+    let totalStaked = getInteger(totalStakedKey).valueOrElse(0)
+    let totalPower = getInteger(totalPowerKey).valueOrElse(0)
+
+    # address params
+    let addressPower = getInteger("address_" + addressStr + "_power").valueOrElse(0)
+
+    let nftAssetIdStr = asset.id.toBase58String()
+    let nftPower = getIntegerValue("nft_" + nftAssetIdStr + "_power")
+    [
+      ScriptTransfer(i.caller, 1, asset.id),
+      IntegerEntry(totalStakedKey, totalStaked - 1),
+      IntegerEntry(totalPowerKey, totalPower - nftPower),
+
+      DeleteEntry("nft_" + nftAssetIdStr + "_owner"),
+      DeleteEntry("nft_" + nftAssetIdStr + "_power"),
+
+      IntegerEntry("address_" + addressStr + "_power", addressPower - nftPower)
+    ]
+  }
+  else throw("Invalid nft Id")
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)

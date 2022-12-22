@@ -170,7 +170,7 @@ func mint(name: String, desc: String, collection: String, preview: String, origi
 
         let randData = if (randIndexList.size() > 0 && sourceList.size() > 0) then {
           if (randIndexList.split_51C(",").size() != amount) then throw("random list is not equal to the number of available elements")
-          else if (paramsList.split_51C(",").size() != amount) then throw("params list is not equal to the number of available elements")
+          else if (paramsList.size() == 0) then throw("params list is empty")
           else {
             [
               StringEntry("group_" + assetIdStr + "_sourceList", sourceList),
