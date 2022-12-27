@@ -3,7 +3,8 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
-let marketFeeAddress = Address(base58'3PEa88W5it7LVPVwtpZDfYajQQWkxFNG8qf')
+let marketFeeAddress = Address(base58'3PKvcEmyHvo2PRsKhpKrDjmSNmnsuHn3UBR')
+let DAOAddress = Address(base58'3P975LUuqc7uBPiSxp3nemf2FZh62zfirSh')
 let puzzleStakeAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
 let proxyDappAddress = base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A'
 
@@ -159,11 +160,13 @@ func buyNFT(nftId: String) = {
     } else {
       # calculate royalty
       let royaltyPart = fraction(buyOutPrice, royaltyPercent, 100)
-      let marketFee = fraction(buyOutPrice, 3, 100)
+      let marketFee = fraction(buyOutPrice, 1, 100)
+      let DAOFee = fraction(buyOutPrice, 2, 100)
       [
         ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee, buyOutAssetId),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAssetId),
-        ScriptTransfer(marketFeeAddress, marketFee, buyOutAssetId)
+        ScriptTransfer(marketFeeAddress, marketFee, buyOutAssetId),
+        ScriptTransfer(DAOAddress, DAOFee, buyOutAssetId)
       ]
     }
 
@@ -388,7 +391,8 @@ func acceptBid(nftId: String, betId: String) = {
         # calculate royalty
         let royaltyReceiver = tryGetString("nft_" + nftId + "_royaltyReceiver")
         let royaltyPart = fraction(betAmount, royaltyPercent, 100)
-        let marketFee = fraction(betAmount, 3, 100)
+        let marketFee = fraction(betAmount, 1, 100)
+        let DAOFee = fraction(betAmount, 2, 100)
 
         strict unlockedNftStr = match invoke(Address(proxyDappAddress), "unlock", [], [AttachedPayment(nftId.fromBase58String(), 1)]) {
           case s:String => s
@@ -401,6 +405,7 @@ func acceptBid(nftId: String, betId: String) = {
             ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
+            ScriptTransfer(DAOAddress, DAOFee, betAssetId),
 
             DeleteEntry("nft_" + nftId + "_buyOutPrice"),
             DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
