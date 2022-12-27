@@ -16,7 +16,7 @@ func getIssuerParams(asset: Asset) = {
     # pattern 500_XL_BBBCDCFDBDDEDBDBBCDEDDDBB_Africa
     let parts = asset.description.split("_")
     let image = "https://waveslands.com/api/v1/images/" + parts[2] + "/png"
-    [asset.name, "#" + parts[0] + "\nSize: " + parts[1] + "\nCode: " + parts[2] + "\nContinent: " + parts[3], "WavesLands", "", image, 1, "", ""]
+    [asset.name, "#" + parts[0] + "\nSize: " + parts[1] + "\nCode: " + parts[2] + "\nContinent: " + parts[3], "WavesLands", "", image, 1, "", "", ""]
   } else throw("Wrong NFT asset for issue")
 }
 
