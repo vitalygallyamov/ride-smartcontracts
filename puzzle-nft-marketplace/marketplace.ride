@@ -8,6 +8,8 @@ let DAOAddress = Address(base58'3P975LUuqc7uBPiSxp3nemf2FZh62zfirSh')
 let puzzleStakeAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
 let proxyDappAddress = base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A'
 
+let adminAddress = Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD')
+
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
@@ -79,6 +81,13 @@ func allTransfersForBid(nftId: String, exclude: String) = {
   }
 }
 
+func isAddressBan(address: String) = {
+  match (getBoolean("address_" + address + "_banned")) {
+    case t:Boolean => t
+    case _ => false
+  }
+}
+
 @Callable(i)
 func sellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: String) = {
 
@@ -89,7 +98,8 @@ func sellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: String) = {
   let isFree = buyOutAssetId == "free"
   let buyOutAsset = if (isFree) then unit else buyOutAssetId.getAssetBytes()
 
-  if (isDefined(pmt.assetId)) then {
+  if (isAddressBan(i.originCaller.toString())) then throw("You are banned")
+  else if (isDefined(pmt.assetId)) then {
     let nftId = value(pmt.assetId)
     let nft = match assetInfo(nftId) {
       case a:Asset => a
@@ -223,7 +233,7 @@ func cancelSell(nftId: String) = {
   let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
   let auctionKey = "auction_" + nftAsset.id.toBase58String() + "_bids"
 
-  if (size(sellerStr) > 0 && sellerStr == i.originCaller.toString()) then {
+  if (size(sellerStr) > 0 && (sellerStr == i.originCaller.toString() || adminAddress == i.originCaller)) then {
     ([
       ScriptTransfer(i.caller, 1, nftAsset.id),
 
@@ -237,6 +247,24 @@ func cancelSell(nftId: String) = {
       DeleteEntry(auctionKey)
     ] ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftId)
   } else throw("You are not a seller")
+}
+
+@Callable(i)
+func ban(address: String) = {
+  if (i.caller == adminAddress) then {
+    [
+      BooleanEntry("address_" + address + "_banned", true)
+    ]
+  } else throw("Allow only for admin")
+}
+
+@Callable(i)
+func unBan(address: String) = {
+  if (i.caller == adminAddress) then {
+    [
+      DeleteEntry("address_" + address + "_banned")
+    ]
+  } else throw("Allow only for admin")
 }
 
 @Callable(i)

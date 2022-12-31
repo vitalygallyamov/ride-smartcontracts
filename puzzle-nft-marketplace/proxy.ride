@@ -123,8 +123,13 @@ func getAddressForUnwrap(nftStr: String) = {
   } else unit
 }
 
+func checkCall(i: Invocation) = {
+  if (i.caller != i.originCaller) then throw("Call from another contract is forbidden") else true
+}
+
 @Callable(i)
 func lockAndSellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: String) = {
+  let isValidCall = checkCall(i)
 
   let assetId = i.payments[0].value().assetId.value()
   let asset = assetInfo(assetId).value()
@@ -143,7 +148,7 @@ func lockAndSellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: Stri
       asset.id.toBase58String()
     }
 
-  if (stakedNFTIdStr.size() > 0) then {
+  if (isValidCall && stakedNFTIdStr.size() > 0) then {
     strict inv = invoke(Address(marketplaceContractAddress), "sellNFT",
       [buyOutPrice, buyOutAssetId, sellerComment],
       [AttachedPayment(stakedNFTIdStr.fromBase58String(), 1)])
@@ -153,13 +158,14 @@ func lockAndSellNFT(buyOutPrice: Int, buyOutAssetId: String, sellerComment: Stri
 
 @Callable(i)
 func cancelSellAndUnlock(nftId: String) = {
+  let isValidCall = checkCall(i)
 
   let asset = assetInfo(nftId.fromBase58String()).value()
 
   let wrapAddress = nftId.getAddressForUnwrap()
 
   # cancel sell nft from market
-  if (asset.isNftFromMarketplace()) then {
+  if (isValidCall && asset.isNftFromMarketplace()) then {
     strict canceledNftStr = match invoke(Address(marketplaceContractAddress), "cancelSell", [nftId], []) {
       case s:String => s
       case _ => throw("Somthing wrong when cancel sell NFT")
@@ -186,9 +192,10 @@ func cancelSellAndUnlock(nftId: String) = {
 
 @Callable(i)
 func unlock() = {
+  let isValidCall = checkCall(i)
   let asset = assetInfo(i.payments[0].assetId.value()).value()
 
-  if (asset.isNftFromMarketplace() && i.payments[0].amount == 1) then {
+  if (isValidCall && asset.isNftFromMarketplace() && i.payments[0].amount == 1) then {
     let assetIdStr = asset.id.toBase58String()
     let wrapAddress = assetIdStr.getAddressForUnwrap()
     # if wrapped nft, then call unlock
@@ -212,7 +219,7 @@ func unlock() = {
 
 @Callable(i)
 func buy(nftId: String) = {
- 
+  let isValidCall = checkCall(i)
   strict boughtNft = match invoke(Address(marketplaceContractAddress), "buyNFT", [nftId], i.payments) {
     case s:String => s
     case _ => throw("Somthing wrong when buy NFT")
@@ -220,7 +227,7 @@ func buy(nftId: String) = {
 
   let asset = assetInfo(boughtNft.fromBase58String()).value()
 
-  if (boughtNft.size() > 0 && asset.isNftFromMarketplace()) then {
+  if (isValidCall && boughtNft.size() > 0 && asset.isNftFromMarketplace()) then {
 
     # check is wrap asset
     let wrapAddress = nftId.getAddressForUnwrap()
