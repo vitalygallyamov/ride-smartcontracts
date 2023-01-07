@@ -21,6 +21,12 @@ func getPowerNFT(asset: Asset) = {
   if params == "gold" then 50 else 10
 }
 
+func getCollectionIssuer(collectionId: String) = {
+  let assetId = getString(creationAddress, "collection_" + collectionId + "_assetId").valueOrElse("")
+
+  getString(creationAddress, "nft_" + assetId + "_issuer").valueOrElse("")
+}
+
 @Callable(i)
 func stake() = {
   let addressStr = i.caller.toString()
@@ -78,6 +84,150 @@ func unstake(nftIdStr: String) = {
     ]
   }
   else throw("Invalid nft Id")
+}
+
+@Callable(i)
+func sendToVote(collectionId: String) = {
+  let issuer = collectionId.getCollectionIssuer()
+  if (issuer.size() == 0) then throw("Collection issuer not found")
+  else if (issuer != i.caller.toString()) then throw("Only the issuer can submit to the vote")
+  else {
+    let voteId = i.transactionId.toBase58String()
+    [
+      StringEntry("collection_" + collectionId + "_voteId", voteId),
+      StringEntry("vote_" + voteId + "_collectionId", collectionId),
+      StringEntry("vote_" + voteId + "_owner", i.caller.toString()),
+      IntegerEntry("vote_" + voteId + "_createdAt", height)
+    ]
+  }
+}
+
+@Callable(i)
+func removeFromVote(voteId: String) = {
+  let collectionId = getString("vote_" + voteId + "_collectionId").valueOrErrorMessage("Collection Id not found")
+  let owner = getString("vote_" + voteId + "_owner").valueOrErrorMessage("Owner not found")
+  if (owner != i.caller.toString()) then throw("You are not the owner")
+  else {
+    [
+      DeleteEntry("collection_" + collectionId + "_voteId"),
+      DeleteEntry("vote_" + voteId + "_collectionId"),
+      DeleteEntry("vote_" + voteId + "_owner"),
+      DeleteEntry("vote_" + voteId + "_createdAt")
+    ]
+  }
+}
+
+@Callable(i)
+func vote(voteId: String, type: String) = {
+  let addressStr = i.caller.toString()
+
+  let exist = match (getString("vote_" + voteId + "_collectionId")) {
+    case t:String => true
+    case _ => false
+  }
+
+  let voterVoteKey = "voter_" + addressStr + "_vote_" + voteId + "_isVoted"
+  let voterVoteTypeKey = "voter_" + addressStr + "_vote_" + voteId + "_type"
+  let voterVotePowerKey = "voter_" + addressStr + "_vote_" + voteId + "_power"
+  let voterVoteCreatedKey = "voter_" + addressStr + "_vote_" + voteId + "_created"
+
+  let voterVotesCountKey = "voter_" + addressStr + "_votesCount"
+  let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+
+  let voteUpCountKey = "vote_" + voteId + "_upCount"
+  let voteDownCountKey = "vote_" + voteId + "_downCount"
+  let voteTotalCountKey = "vote_" + voteId + "_totalCount"
+
+  let addressPower = getInteger("address_" + addressStr + "_power").valueOrErrorMessage("The address has no voting power")
+  let totalCount = getInteger(voteTotalCountKey).valueOrElse(0)
+
+  let voterVotesCount = getInteger(voterVotesCountKey).valueOrElse(0)
+  let voterSpentPower = getInteger(voterSpentPowerKey).valueOrElse(0)
+
+  let voteChangeStates =
+    if (type == "up") then {
+      let upCount = getInteger(voteUpCountKey).valueOrElse(0)
+      [
+        IntegerEntry(voteUpCountKey, upCount + addressPower)
+      ]
+    }
+    else if (type == "down") then {
+      let downCount = getInteger(voteDownCountKey).valueOrElse(0)
+      [
+        IntegerEntry(voteDownCountKey, downCount + addressPower)
+      ]
+    }
+    else throw("Invalid type")
+
+  let isCallerVoted = getBoolean(voterVoteKey).valueOrElse(false)
+  if (isCallerVoted) then throw("You have already voted")
+  else if (!exist) then throw("Collection not found")
+  else {
+    [
+      BooleanEntry(voterVoteKey, true),
+      StringEntry(voterVoteTypeKey, type),
+      IntegerEntry(voterVoteCreatedKey, height),
+      IntegerEntry(voterVotePowerKey, addressPower),
+      IntegerEntry(voterVotesCountKey, voterVotesCount + 1),
+      IntegerEntry(voterSpentPowerKey, voterSpentPower + addressPower),
+
+      IntegerEntry(voteTotalCountKey, totalCount + addressPower)
+    ] ++ voteChangeStates
+  }
+}
+
+@Callable(i)
+func unvote(voteId: String) = {
+  let addressStr = i.caller.toString()
+
+  let voterVoteKey = "voter_" + addressStr + "_vote_" + voteId + "_isVoted"
+  let voterVoteTypeKey = "voter_" + addressStr + "_vote_" + voteId + "_type"
+  let voterVotePowerKey = "voter_" + addressStr + "_vote_" + voteId + "_power"
+  let voterVoteCreatedKey = "voter_" + addressStr + "_vote_" + voteId + "_created"
+
+  let voterVotesCountKey = "voter_" + addressStr + "_votesCount"
+  let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+
+  let voteUpCountKey = "vote_" + voteId + "_upCount"
+  let voteDownCountKey = "vote_" + voteId + "_downCount"
+  let voteTotalCountKey = "vote_" + voteId + "_totalCount"
+
+  let voteIdType = getString(voterVoteTypeKey).valueOrErrorMessage("Vote Id type not founded")
+  let voteIdPower = getInteger(voterVotePowerKey).valueOrErrorMessage("Vote Id power not founded")
+  let totalCount = getInteger(voteTotalCountKey).valueOrErrorMessage("Vote Id total count not founded")
+
+  let voterVotesCount = getInteger(voterVotesCountKey).valueOrErrorMessage("Voter votes count value not founded")
+  let voterSpentPower = getInteger(voterSpentPowerKey).valueOrErrorMessage("Voter spent power value not founded")
+
+  let voteChangeStates =
+    if (voteIdType == "up") then {
+      let upCount = getInteger(voteUpCountKey).valueOrElse(0)
+      [
+        IntegerEntry(voteUpCountKey, upCount - voteIdPower)
+      ]
+    }
+    else if (voteIdType == "down") then {
+      let downCount = getInteger(voteDownCountKey).valueOrElse(0)
+      [
+        IntegerEntry(voteDownCountKey, downCount - voteIdPower)
+      ]
+    }
+    else throw("Invalid type")
+
+  let isCallerVoted = getBoolean(voterVoteKey).valueOrElse(false)
+  if (!isCallerVoted) then throw("You haven't voted yet")
+  else {
+    [
+      DeleteEntry(voterVoteKey),
+      DeleteEntry(voterVoteTypeKey),
+      DeleteEntry(voterVoteCreatedKey),
+      DeleteEntry(voterVotePowerKey),
+      IntegerEntry(voterVotesCountKey, voterVotesCount - 1),
+      IntegerEntry(voterSpentPowerKey, voterSpentPower - voteIdPower),
+
+      IntegerEntry(voteTotalCountKey, totalCount - voteIdPower)
+    ] ++ voteChangeStates
+  }
 }
 
 @Verifier(tx)
