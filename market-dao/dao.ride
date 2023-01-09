@@ -7,6 +7,12 @@ let creationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 let totalStakedKey = "total_staked"
 let totalPowerKey = "total_power"
 
+let POWER_LIMIT = 1000
+
+let whitelist = [
+  "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD"
+]
+
 # Check NFT and NFT issuer
 func checkNFT(asset: Asset) = {
   getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_issuer") == this.toString() &&
@@ -25,6 +31,15 @@ func getCollectionIssuer(collectionId: String) = {
   let assetId = getString(creationAddress, "collection_" + collectionId + "_assetId").valueOrElse("")
 
   getString(creationAddress, "nft_" + assetId + "_issuer").valueOrElse("")
+}
+
+func isVotingClosed(voteId: String) = {
+  let voteConfirmedKey = "vote_" + voteId + "_confirmed"
+  let voteRejectedKey = "vote_" + voteId + "_rejected"
+
+  let isConfirmed = getBoolean(voteConfirmedKey).valueOrElse(false)
+  let isRejected = getBoolean(voteRejectedKey).valueOrElse(false)
+  isConfirmed || isRejected
 }
 
 @Callable(i)
@@ -89,15 +104,23 @@ func unstake(nftIdStr: String) = {
 @Callable(i)
 func sendToVote(collectionId: String) = {
   let issuer = collectionId.getCollectionIssuer()
+  let isExist = match (getString("collection_" + collectionId + "_voteId")) {
+      case t:String => true
+      case _ => false
+    }
   if (issuer.size() == 0) then throw("Collection issuer not found")
+  else if (isExist) then throw("Collection has already been submitted for voting")
+  else if (whitelist.indexOf(i.caller.toString()) == unit) then throw("Functionality temporarily unavailable")
   else if (issuer != i.caller.toString()) then throw("Only the issuer can submit to the vote")
   else {
-    let voteId = i.transactionId.toBase58String()
+    let voteId = sha256_16Kb(collectionId.toBytes()).toBase58String()
+    let totalVotes = getInteger("total_votes").valueOrElse(0)
     [
       StringEntry("collection_" + collectionId + "_voteId", voteId),
       StringEntry("vote_" + voteId + "_collectionId", collectionId),
       StringEntry("vote_" + voteId + "_owner", i.caller.toString()),
-      IntegerEntry("vote_" + voteId + "_createdAt", height)
+      IntegerEntry("vote_" + voteId + "_createdAt", height),
+      IntegerEntry("total_votes", totalVotes + 1)
     ]
   }
 }
@@ -107,12 +130,15 @@ func removeFromVote(voteId: String) = {
   let collectionId = getString("vote_" + voteId + "_collectionId").valueOrErrorMessage("Collection Id not found")
   let owner = getString("vote_" + voteId + "_owner").valueOrErrorMessage("Owner not found")
   if (owner != i.caller.toString()) then throw("You are not the owner")
+  else if (isVotingClosed(voteId)) then throw("Voting is closed")
   else {
+    let totalVotes = getInteger("total_votes").valueOrErrorMessage("total votes value not found")
     [
       DeleteEntry("collection_" + collectionId + "_voteId"),
       DeleteEntry("vote_" + voteId + "_collectionId"),
       DeleteEntry("vote_" + voteId + "_owner"),
-      DeleteEntry("vote_" + voteId + "_createdAt")
+      DeleteEntry("vote_" + voteId + "_createdAt"),
+      IntegerEntry("total_votes", totalVotes - 1)
     ]
   }
 }
@@ -138,31 +164,39 @@ func vote(voteId: String, type: String) = {
   let voteDownCountKey = "vote_" + voteId + "_downCount"
   let voteTotalCountKey = "vote_" + voteId + "_totalCount"
 
+  let voteConfirmedKey = "vote_" + voteId + "_confirmed"
+  let voteRejectedKey = "vote_" + voteId + "_rejected"
+
   let addressPower = getInteger("address_" + addressStr + "_power").valueOrErrorMessage("The address has no voting power")
-  let totalCount = getInteger(voteTotalCountKey).valueOrElse(0)
+  let totalVoteCount = getInteger(voteTotalCountKey).valueOrElse(0)
 
   let voterVotesCount = getInteger(voterVotesCountKey).valueOrElse(0)
   let voterSpentPower = getInteger(voterSpentPowerKey).valueOrElse(0)
 
-  let voteChangeStates =
-    if (type == "up") then {
-      let upCount = getInteger(voteUpCountKey).valueOrElse(0)
-      [
-        IntegerEntry(voteUpCountKey, upCount + addressPower)
-      ]
-    }
-    else if (type == "down") then {
-      let downCount = getInteger(voteDownCountKey).valueOrElse(0)
-      [
-        IntegerEntry(voteDownCountKey, downCount + addressPower)
-      ]
-    }
-    else throw("Invalid type")
+  let upCountDapp = getInteger(voteUpCountKey).valueOrElse(0)
+  let downCountDapp = getInteger(voteDownCountKey).valueOrElse(0)
+
+  let upCount = if (type == "up") then upCountDapp + addressPower else upCountDapp
+  let downCount = if (type == "down") then downCountDapp + addressPower else downCountDapp
 
   let isCallerVoted = getBoolean(voterVoteKey).valueOrElse(false)
+
   if (isCallerVoted) then throw("You have already voted")
+  else if (isVotingClosed(voteId)) then throw("Voting is closed")
   else if (!exist) then throw("Collection not found")
+  else if(type != "up" && type != "down") then throw("Invalid type parametr")
   else {
+    let updatedVoteCount = totalVoteCount + addressPower
+    let endVoteStates = if (updatedVoteCount >= POWER_LIMIT) then {
+      let upPercent = fraction(upCount, 100, updatedVoteCount)
+      let downPercent = fraction(downCount, 100, updatedVoteCount)
+      if (upPercent >= 50) then [
+        BooleanEntry(voteConfirmedKey, true)
+      ]
+      else [
+        BooleanEntry(voteRejectedKey, true)
+      ]
+    } else []
     [
       BooleanEntry(voterVoteKey, true),
       StringEntry(voterVoteTypeKey, type),
@@ -171,8 +205,11 @@ func vote(voteId: String, type: String) = {
       IntegerEntry(voterVotesCountKey, voterVotesCount + 1),
       IntegerEntry(voterSpentPowerKey, voterSpentPower + addressPower),
 
-      IntegerEntry(voteTotalCountKey, totalCount + addressPower)
-    ] ++ voteChangeStates
+      IntegerEntry(voteUpCountKey, upCount),
+      IntegerEntry(voteDownCountKey, downCount),
+
+      IntegerEntry(voteTotalCountKey, updatedVoteCount)
+    ] ++ endVoteStates
   }
 }
 
@@ -192,6 +229,9 @@ func unvote(voteId: String) = {
   let voteDownCountKey = "vote_" + voteId + "_downCount"
   let voteTotalCountKey = "vote_" + voteId + "_totalCount"
 
+  let voteConfirmedKey = "vote_" + voteId + "_confirmed"
+  let voteRejectedKey = "vote_" + voteId + "_rejected"
+
   let voteIdType = getString(voterVoteTypeKey).valueOrErrorMessage("Vote Id type not founded")
   let voteIdPower = getInteger(voterVotePowerKey).valueOrErrorMessage("Vote Id power not founded")
   let totalCount = getInteger(voteTotalCountKey).valueOrErrorMessage("Vote Id total count not founded")
@@ -199,23 +239,16 @@ func unvote(voteId: String) = {
   let voterVotesCount = getInteger(voterVotesCountKey).valueOrErrorMessage("Voter votes count value not founded")
   let voterSpentPower = getInteger(voterSpentPowerKey).valueOrErrorMessage("Voter spent power value not founded")
 
-  let voteChangeStates =
-    if (voteIdType == "up") then {
-      let upCount = getInteger(voteUpCountKey).valueOrElse(0)
-      [
-        IntegerEntry(voteUpCountKey, upCount - voteIdPower)
-      ]
-    }
-    else if (voteIdType == "down") then {
-      let downCount = getInteger(voteDownCountKey).valueOrElse(0)
-      [
-        IntegerEntry(voteDownCountKey, downCount - voteIdPower)
-      ]
-    }
-    else throw("Invalid type")
+  let upCountDapp = getInteger(voteUpCountKey).valueOrErrorMessage("Up count note found")
+  let downCountDapp = getInteger(voteDownCountKey).valueOrErrorMessage("Down count note found")
+
+  let upCount = if (voteIdType == "up") then upCountDapp - voteIdPower else upCountDapp
+  let downCount = if (voteIdType == "down") then downCountDapp - voteIdPower else downCountDapp
 
   let isCallerVoted = getBoolean(voterVoteKey).valueOrElse(false)
   if (!isCallerVoted) then throw("You haven't voted yet")
+  else if (isVotingClosed(voteId)) then throw("Voting is closed")
+  else if(voteIdType != "up" && voteIdType != "down") then throw("Invalid type parametr")
   else {
     [
       DeleteEntry(voterVoteKey),
@@ -225,8 +258,11 @@ func unvote(voteId: String) = {
       IntegerEntry(voterVotesCountKey, voterVotesCount - 1),
       IntegerEntry(voterSpentPowerKey, voterSpentPower - voteIdPower),
 
+      IntegerEntry(voteUpCountKey, upCount),
+      IntegerEntry(voteDownCountKey, downCount),
+
       IntegerEntry(voteTotalCountKey, totalCount - voteIdPower)
-    ] ++ voteChangeStates
+    ]
   }
 }
 
