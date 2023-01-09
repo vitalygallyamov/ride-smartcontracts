@@ -173,7 +173,7 @@ func buyNFT(nftId: String) = {
       let marketFee = fraction(buyOutPrice, 1, 100)
       let DAOFee = fraction(buyOutPrice, 2, 100)
       [
-        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee, buyOutAssetId),
+        ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee - DAOFee, buyOutAssetId),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAssetId),
         ScriptTransfer(marketFeeAddress, marketFee, buyOutAssetId),
         ScriptTransfer(DAOAddress, DAOFee, buyOutAssetId)
@@ -430,7 +430,7 @@ func acceptBid(nftId: String, betId: String) = {
         if (bets.containsElement(betId) && betAmount > 0) then {
           [
             ScriptTransfer(Address(betOwner.fromBase58String()), 1, unlockedNftStr.fromBase58String()),
-            ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee, betAssetId),
+            ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee - DAOFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
             ScriptTransfer(DAOAddress, DAOFee, betAssetId),

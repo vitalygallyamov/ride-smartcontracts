@@ -193,7 +193,7 @@ func unlock() = {
       [
         ScriptTransfer(marketFeeAddress, marketFee, usdnAssetId),
         ScriptTransfer(DAOAddress, DAOFee, usdnAssetId),
-        ScriptTransfer(Address(ownerAddress.fromBase58String()), nftReward - marketFee, usdnAssetId)
+        ScriptTransfer(Address(ownerAddress.fromBase58String()), nftReward - marketFee - DAOFee, usdnAssetId)
       ]
     } else []
     
