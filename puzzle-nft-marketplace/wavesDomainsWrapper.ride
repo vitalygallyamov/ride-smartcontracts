@@ -1,0 +1,69 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let nftCreationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+let wavesRegistryAddress = Address(base58'3P6utP25F4wMUGG4hGdDtMXMKu2tTeNkgRs')
+
+
+func key_entity(name: String, pk: String, property: String) = name + "_" + pk + "_" + property
+func key_Token_locker(domainsNftId: String) = key_entity("Token", domainsNftId, "locker")
+func key_Wrapped_token(wrappedNftId: String) = key_entity("Wrapped", wrappedNftId, "tokenId")
+
+
+func findNftIssuedBy(assetId: ByteVector | Unit, issuer: Address) =
+    if !assetId.isDefined() then unit else match assetInfo(assetId.value()) {
+        case maybeNft: Asset =>
+            if maybeNft.issuer == issuer
+                && maybeNft.decimals == 0
+                && maybeNft.reissuable == false
+                && maybeNft.quantity == 1
+            then maybeNft
+            else unit
+        case _ => unit
+    }
+
+
+
+@Callable(i)
+func lock() = {
+    let callerStr = i.caller.toString()
+    let assetId = i.payments[0].assetId
+
+    let domainsNft = if i.payments.size() != 1 then
+        throw("Only single payment required")
+    else
+        findNftIssuedBy(assetId, wavesRegistryAddress)
+            .valueOrErrorMessage("Payment must contain Waves Domains NFT")
+
+
+    # TODO validate token ownership and expiry via WavesRegistry
+
+
+    let domainsNftIdStr = domainsNft.id.toBase58String()
+    let imageLink = "https://app.waves.domains/api/v1/nft-img/" + domainsNftIdStr
+
+    strict wrappedNftIdStr =
+        match nftCreationAddress.invoke(
+                "createNft",
+                [domainsNft.name, domainsNft.description, imageLink, "WavesDomains"],
+                nil
+        ) {
+            case maybeNftId: String => maybeNftId
+            case _ => throw("Something went wrong during creation of NFT")
+        }
+    
+    (
+        [
+            ScriptTransfer(i.caller, 1, wrappedNftIdStr.fromBase58String()),
+
+            StringEntry(key_Token_owner(domainsNftIdStr), callerStr),
+            StringEntry(key_Wrapped_token(wrappedNftIdStr), domainsNftIdStr)
+        ],
+        wrappedNftIdStr
+    )
+}
+
+
+@Callable(i)
+func unlock() = ([], unit)
