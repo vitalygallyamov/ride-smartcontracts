@@ -24,7 +24,6 @@ func findNftIssuedBy(assetId: ByteVector | Unit, issuer: Address) =
     }
 
 
-
 @Callable(i)
 func lock() = {
     let callerStr = i.caller.toString()
@@ -66,4 +65,36 @@ func lock() = {
 
 
 @Callable(i)
-func unlock() = ([], unit)
+func unlock() = {
+    let callerStr = i.caller.toString()
+    let assetId = i.payments[0].assetId
+
+    let wrappedNft = if i.payments.size() != 1 then
+        throw("Only single payment required")
+    else
+        findNftIssuedBy(assetId, nftCreationAddress)
+            .valueOrErrorMessage("Payment must contain wrapped Waves Domains NFT")
+
+    let wrappedNftIdStr = wrappedNft.id.toBase58String()
+
+    let domainsNftIdStr = getStringValue(key_Wrapped_token(wrappedNftIdStr))
+    let domainsNftId = domainsNftIdStr.fromBase58String()
+    let tokenOwner = getStringValue(key_Token_owner(domainsNftIdStr))
+
+    if (tokenOwner != callerStr) then
+        throw("This NFT does not belongs to you")
+    else {
+        strict burnWrappedNft =
+            nftCreationAddress.invoke("burnNFT", [], [AttachedPayment(wrappedNft.id, 1)])
+
+        (
+            [
+                ScriptTransfer(i.caller, 1, domainsNftId),
+
+                DeleteEntry(key_Wrapped_token(wrappedNftIdStr)),
+                DeleteEntry(key_Token_owner(domainsNftIdStr))
+            ],
+            domainsNftIdStr
+        )
+    }
+}
