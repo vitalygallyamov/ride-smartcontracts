@@ -107,3 +107,42 @@ func unlock() = {
         )
     }
 }
+
+
+@Verifier(tx)
+func verify() = {
+    let maybeOracle = this.getString("Oracle").valueOrElse("").addressFromString()
+    let maybeAdminKeys =
+        if maybeOracle.isDefined() then maybeOracle.value().getString("AdminKeys") else unit
+
+    match maybeAdminKeys {
+        case adminKeysStr: String => {
+            let adminKeys = {
+                let stringKeys = adminKeysStr.split(",")
+
+                [
+                    stringKeys[0].fromBase58String(),
+                    stringKeys[1].fromBase58String(),
+                    stringKeys[2].fromBase58String()
+                ]
+            }
+
+            func verifyByAllKeys(proof: ByteVector) = {
+                if sigVerify(tx.bodyBytes, proof, adminKeys[0]) then
+                    1
+                else if sigVerify(tx.bodyBytes, proof, adminKeys[1]) then
+                    10
+                else if sigVerify(tx.bodyBytes, proof, adminKeys[2]) then
+                    100
+                else
+                    0
+            }
+
+            [110, 101, 11].containsElement(
+                tx.proofs[0].verifyByAllKeys()
+                + tx.proofs[1].verifyByAllKeys()
+            )
+        }
+        case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+    }
+}
