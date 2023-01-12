@@ -35,11 +35,20 @@ func lock() = {
         findNftIssuedBy(assetId, wavesRegistryAddress)
             .valueOrErrorMessage("Payment must contain Waves Domains NFT")
 
-
-    # TODO validate token ownership and expiry via WavesRegistry
-
-
     let domainsNftIdStr = domainsNft.id.toBase58String()
+
+    let labels = domainsNft.description.split(".")
+    let name = if labels.size() == 2 && labels[1] == "waves" then labels[0] else "~"
+
+    let isActiveName = match wavesRegistryAddress.invoke(
+            "isActive", [name], nil
+        ) {
+            case maybeActive: Boolean => maybeActive
+            case _ => false
+        }
+    strict onlyActiveNameCanBeLocked =
+        if isActiveName then unit else throw("`" + name + "` is not active")
+
     let imageLink = "https://app.waves.domains/api/v1/nft-img/" + domainsNftIdStr
 
     strict wrappedNftIdStr =
@@ -56,7 +65,7 @@ func lock() = {
         [
             ScriptTransfer(i.caller, 1, wrappedNftIdStr.fromBase58String()),
 
-            StringEntry(key_Token_owner(domainsNftIdStr), callerStr),
+            StringEntry(key_Token_locker(domainsNftIdStr), callerStr),
             StringEntry(key_Wrapped_token(wrappedNftIdStr), domainsNftIdStr)
         ],
         wrappedNftIdStr
@@ -79,9 +88,9 @@ func unlock() = {
 
     let domainsNftIdStr = getStringValue(key_Wrapped_token(wrappedNftIdStr))
     let domainsNftId = domainsNftIdStr.fromBase58String()
-    let tokenOwner = getStringValue(key_Token_owner(domainsNftIdStr))
+    let tokenLocker = getStringValue(key_Token_locker(domainsNftIdStr))
 
-    if (tokenOwner != callerStr) then
+    if (tokenLocker != callerStr) then
         throw("This NFT does not belongs to you")
     else {
         strict burnWrappedNft =
@@ -92,7 +101,7 @@ func unlock() = {
                 ScriptTransfer(i.caller, 1, domainsNftId),
 
                 DeleteEntry(key_Wrapped_token(wrappedNftIdStr)),
-                DeleteEntry(key_Token_owner(domainsNftIdStr))
+                DeleteEntry(key_Token_locker(domainsNftIdStr))
             ],
             domainsNftIdStr
         )
