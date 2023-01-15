@@ -4,8 +4,12 @@
 
 let creationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 
+let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
+
 let totalStakedKey = "total_staked"
 let totalPowerKey = "total_power"
+
+let allStakedAddressesKey = "all_staked_addresses"
 
 let POWER_LIMIT = 1000
 
@@ -24,7 +28,7 @@ func checkNFT(asset: Asset) = {
 
 func getPowerNFT(asset: Asset) = {
   let params = getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_params")
-  if params == "gold" then 50 else 10
+  if params == "gold" then 100 else 40
 }
 
 func getCollectionIssuer(collectionId: String) = {
@@ -42,6 +46,78 @@ func isVotingClosed(voteId: String) = {
   isConfirmed || isRejected
 }
 
+# add address to state staked addresses
+func addAddressToStakedAll(address: String) = {
+  let allStakedAddresses = getString(allStakedAddressesKey).valueOrElse("")
+  if (!isDefined(allStakedAddresses.indexOf(address))) then {
+    if (allStakedAddresses.size() == 0) then {
+      [StringEntry(allStakedAddressesKey, address)]
+    } else {
+      [StringEntry(allStakedAddressesKey, (allStakedAddresses.split_51C(",") :+ address).makeString_11C(","))]
+    }
+  } else {
+    []
+  }
+}
+
+# remove address from state staked addresses
+func removeAddressFromStakedAll(address: String) = {
+  let allStakedAddresses = getString(allStakedAddressesKey).valueOrErrorMessage("All staked address string not found")
+  if (isDefined(allStakedAddresses.indexOf(address))) then {
+    let addressesList = allStakedAddresses.split_51C(",")
+    let addressIndex = addressesList.indexOf(address).value()
+    [StringEntry(allStakedAddressesKey, addressesList.removeByIndex(addressIndex).makeString_11C(","))]
+  } else {
+    []
+  }
+}
+
+# func addRewardsToAddresses(assetId: String, amount: Int) = {
+#   let totalPower = getInteger(totalPowerKey).valueOrErrorMessage("Total power not found")
+#   if (totalPower == 0) then throw("Total power must not be zero")
+#   else {
+#     let asset = assetInfo(assetId.fromBase58String()).valueOrErrorMessage("Invalid asset")
+#     let amountPerPower = fraction(amount, asset.decimals, totalPower)
+#     if (amountPerPower > 0) then {
+#       let stakedAddresses = getString(allStakedAddressesKey).valueOrErrorMessage("Staked addresses not found")
+#       if (stakedAddresses.size() == 0) then throw("Staked addresses empty")
+#       else {
+#         let addressesList = stakedAddresses.split_51C(",")
+#         let rewardsListKey = "rewards_" + assetId
+#         let rewardsListStr = getString(rewardsListKey).valueOrElse("")
+        
+#         let resultList = if (rewardsListStr.size() == 0) then {
+#           func addAddressRewards(accum: List[String], next: String) = {
+#             let addressPower = getInteger("address_" + next + "_power").valueOrElse(0)
+#             if (addressPower > 0) then {
+#               accum :+ (next + "_" + fraction(addressPower, amountPerPower, 1).toString())
+#             } else accum
+#           }
+#           FOLD<150>(addressesList, [], addAddressRewards)
+#         } else {
+#           let rewardsList = rewardsListStr.split_51C(",")
+#           func updateAdressRewards(accum: List[String], next: String) = {
+#             let parts = next.split("_")
+#             let address = parts[0]
+#             let addressAmnt = parseInt(parts[1]).valueOrElse(0)
+#             if (isDefined(addressesList.indexOf(address))) then {
+#               let addressPower = getInteger("address_" + address + "_power").valueOrElse(0)
+#               if (addressPower > 0) then {
+#                 accum :+ (address + "_" + (addressAmnt + fraction(addressPower, amountPerPower, 1)).toString())
+#               } else accum :+ next
+#             } else accum :+ next
+#           }
+#           FOLD<150>(rewardsList, [], updateAdressRewards)
+#         }
+
+#         if (resultList.size() > 0) then {
+#           [StringEntry(rewardsListKey, resultList.makeString_11C(","))]
+#         } else []
+#       }
+#     } else throw("Invalid amount per power")
+#   }
+# }
+
 @Callable(i)
 func stake() = {
   let addressStr = i.caller.toString()
@@ -53,20 +129,37 @@ func stake() = {
     let totalPower = getInteger(totalPowerKey).valueOrElse(0)
 
     # address params
-    let addressPower = getInteger("address_" + addressStr + "_power").valueOrElse(0)
+    let addressPowerKey = "address_" + addressStr + "_power"
+    let addressTotalStakedKey = "address_" + addressStr + "_totalStaked"
+    let addressStakedNftsKey = "address_" + addressStr + "_stakedNfts"
 
-    let nftPower = asset.getPowerNFT()
+    let addressPower = getInteger(addressPowerKey).valueOrElse(0)
+    let addressTotalStaked = getInteger(addressTotalStakedKey).valueOrElse(0)
+    let addressStakedNfts = getString(addressStakedNftsKey).valueOrElse("")
 
-    let nftIdStr = asset.id.toBase58String()
-    [
-      IntegerEntry(totalStakedKey, totalStaked + 1),
-      IntegerEntry(totalPowerKey, totalPower + nftPower),
+    if (addressTotalStaked + 1 >= 5) then throw("You can stake only 5 NFTs")
+    else {
+      let nftPower = asset.getPowerNFT()
 
-      StringEntry("nft_" + nftIdStr + "_owner", addressStr),
-      IntegerEntry("nft_" + nftIdStr + "_power", nftPower),
+      let nftIdStr = asset.id.toBase58String()
 
-      IntegerEntry("address_" + addressStr + "_power", addressPower + nftPower)
-    ]
+      let addressStakedNftsState = if (addressStakedNfts.size() == 0) then {
+        [StringEntry(addressStakedNftsKey, nftIdStr)]
+      } else {
+        [StringEntry(addressStakedNftsKey, (addressStakedNfts.split(",") :+ nftIdStr).makeString(","))]
+      }
+
+      [
+        IntegerEntry(totalStakedKey, totalStaked + 1),
+        IntegerEntry(totalPowerKey, totalPower + nftPower),
+
+        StringEntry("nft_" + nftIdStr + "_owner", addressStr),
+        IntegerEntry("nft_" + nftIdStr + "_power", nftPower),
+
+        IntegerEntry(addressPowerKey, addressPower + nftPower),
+        IntegerEntry(addressTotalStakedKey, addressTotalStaked + 1)
+      ] ++ addAddressToStakedAll(addressStr) ++ addressStakedNftsState
+    }
   }
   else throw("No payments")
 }
@@ -83,10 +176,22 @@ func unstake(nftIdStr: String) = {
     let totalPower = getInteger(totalPowerKey).valueOrElse(0)
 
     # address params
-    let addressPower = getInteger("address_" + addressStr + "_power").valueOrElse(0)
+    let addressPowerKey = "address_" + addressStr + "_power"
+    let addressTotalStakedKey = "address_" + addressStr + "_totalStaked"
+    let addressStakedNftsKey = "address_" + addressStr + "_stakedNfts"
+
+    let addressPower = getInteger(addressPowerKey).valueOrErrorMessage("Address power value not found")
+    let addressTotalStaked = getInteger(addressTotalStakedKey).valueOrErrorMessage("Address total staked value not found")
+    let addressStakedNfts = getString(addressStakedNftsKey).valueOrErrorMessage("Address staked Nfts value not found")
 
     let nftAssetIdStr = asset.id.toBase58String()
     let nftPower = getIntegerValue("nft_" + nftAssetIdStr + "_power")
+    
+    let updatedAddressPower = addressPower - nftPower
+    let removeStakedAddress = if (updatedAddressPower == 0) then removeAddressFromStakedAll(addressStr) else []
+
+    let addressStakedNftsList = addressStakedNfts.split(",")
+    let addressStakedNftIndex = addressStakedNftsList.indexOf(nftIdStr).valueOrErrorMessage("NFT not founed in address staked list")
     [
       ScriptTransfer(i.caller, 1, asset.id),
       IntegerEntry(totalStakedKey, totalStaked - 1),
@@ -95,8 +200,11 @@ func unstake(nftIdStr: String) = {
       DeleteEntry("nft_" + nftAssetIdStr + "_owner"),
       DeleteEntry("nft_" + nftAssetIdStr + "_power"),
 
-      IntegerEntry("address_" + addressStr + "_power", addressPower - nftPower)
-    ]
+      IntegerEntry(addressPowerKey, updatedAddressPower),
+      IntegerEntry(addressTotalStakedKey, addressTotalStaked - 1),
+
+      StringEntry(addressStakedNftsKey, (addressStakedNftsList.removeByIndex(addressStakedNftIndex)).makeString(","))
+    ] ++ removeStakedAddress
   }
   else throw("Invalid nft Id")
 }
@@ -263,6 +371,26 @@ func unvote(voteId: String) = {
 
       IntegerEntry(voteTotalCountKey, totalCount - voteIdPower)
     ]
+  }
+}
+
+@Callable(i)
+func fillTreasuary() = {
+  if (i.payments.size() == 0) then throw("No payment")
+  else if (i.payments[0].amount == 0) then throw("Payment must be more 0")
+  else if (i.payments[0].assetId != USDTAssetId) then throw("Payment must be in USDT")
+  else {
+    let amount = i.payments[0].amount
+    let assetId = i.payments[0].assetId.value()
+    let treasuaryAssetIdAvailable = "treasuary_" + assetId.toBase58String() + "_available"
+    let treasuaryAssetIdTotalReceived = "treasuary_" + assetId.toBase58String() + "_totalReceived"
+
+    let available = getInteger(treasuaryAssetIdAvailable).valueOrElse(0)
+    let totalReceived = getInteger(treasuaryAssetIdTotalReceived).valueOrElse(0)
+    [
+      IntegerEntry(treasuaryAssetIdAvailable, available + amount),
+      IntegerEntry(treasuaryAssetIdTotalReceived, totalReceived + amount)
+    ] #++ addRewardsToAddresses(assetId.toBase58String(), amount)
   }
 }
 
