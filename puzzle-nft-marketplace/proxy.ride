@@ -124,7 +124,10 @@ func getAddressForUnwrap(nftStr: String) = {
 }
 
 func checkCall(i: Invocation) = {
-  if (i.caller != i.originCaller) then throw("Call from another contract is forbidden") else true
+  let whiteList = [Address(marketplaceContractAddress)]
+  let whiteListIndex = whiteList.indexOf(i.caller).valueOrElse(-1)
+  if (whiteListIndex >= 0) then true
+  else if (i.caller != i.originCaller) then throw("Call from another contract is forbidden") else true
 }
 
 @Callable(i)
