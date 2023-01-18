@@ -10,12 +10,12 @@ let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
 let totalStakedKey = "total_staked"
 let totalPowerKey = "total_power"
 let totalSpentPowerKey = "total_spentPower"
-let currentEpochKey = "current_epoch"
+
+let votePowerLimitKey = "VOTE_POWER_LIMIT"
+let currentRewordsRoundKey = "current_rewords_round"
 let finalVotingCandidatesKey = "final_voiting_candidates"
 
 let allStakedAddressesKey = "all_staked_addresses"
-
-let VOTE_POWER_LIMIT = 1000
 
 let whitelist = [
   "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD"
@@ -223,16 +223,10 @@ func voteByNFT(voteId: String, assets: String) = {
     let voteUsedNftsKey = "vote_" + voteId + "_usedNfts"
 
     let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+    let voterVoteSpentPowerKey = "voter_" + addressStr + "_vote_" + voteId + "_spentPower"
 
     let addressPowerKey = "address_" + addressStr + "_power"
     let addressStakedNftsKey = "address_" + addressStr + "_stakedNfts"
-
-    let currentEpoch = getInteger(currentEpochKey).valueOrElse(0)
-    let epochSpentPowerKey = "epoch_" + currentEpoch.toString() + "_spentPower"
-    let epochAddressSpentPowerKey = "epoch_" + currentEpoch.toString() + "_address_" + addressStr + "_spentPower"
-
-    let epochSpentPower = getInteger(epochSpentPowerKey).valueOrElse(0)
-    let epochAddressSpentPower = getInteger(epochAddressSpentPowerKey).valueOrElse(0)
 
     let upPowerDapp = getInteger(voteUpPowerKey).valueOrElse(0)
     let downPowerDapp = getInteger(voteDownPowerKey).valueOrElse(0)
@@ -242,8 +236,15 @@ func voteByNFT(voteId: String, assets: String) = {
     let voterSpentPower = getInteger(voterSpentPowerKey).valueOrElse(0)
     let totalSpentPower = getInteger(totalSpentPowerKey).valueOrElse(0)
 
+    let voterVoteSpentPower = getInteger(voterVoteSpentPowerKey).valueOrElse(0)
+
     let addressPower = getInteger(addressPowerKey).valueOrErrorMessage("You don't have power")
     let addressStakedNfts = getString(addressStakedNftsKey).valueOrErrorMessage("You don't have staked NFTs")
+
+    let adderssLastRewardRoundKey = "address_" + addressStr + "_lastRewardsRound"
+
+    let currentRewordsRound = getInteger(currentRewordsRoundKey).valueOrElse(0)
+    let adderssLastRewardRound = getInteger(adderssLastRewardRoundKey).valueOrElse(0)
 
     let assetsList = assets.split("|")
     func processAssets(accum: (Int, Int, List[String], List[StringEntry]), next: String) = {
@@ -282,10 +283,15 @@ func voteByNFT(voteId: String, assets: String) = {
     else if (processResultTuple._3.size() == 0) then throw("Used list must not be empty")
     else if (processResultTuple._4.size() == 0) then throw("State entries list must not be empty")
     else {
-      
+      let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
       let updateCanditatesList = if (totalVotePower + powerValue > VOTE_POWER_LIMIT)
         then addStringToStateArray(finalVotingCandidatesKey, voteId)
         else []
+
+      let addressRewordsRoundState = if (adderssLastRewardRound == 0 && currentRewordsRound > adderssLastRewardRound) then {
+        [IntegerEntry(adderssLastRewardRoundKey, currentRewordsRound)]
+      } else []
+
       [
         IntegerEntry(voterSpentPowerKey, voterSpentPower + powerValue),
         IntegerEntry(totalSpentPowerKey, totalSpentPower + powerValue),
@@ -294,11 +300,10 @@ func voteByNFT(voteId: String, assets: String) = {
         IntegerEntry(voteDownPowerKey, downPowerDapp + downPower),
         IntegerEntry(voteTotalPowerKey, totalVotePower + powerValue),
 
-        StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(",")),
+        IntegerEntry(voterVoteSpentPowerKey, voterVoteSpentPower + powerValue),
 
-        IntegerEntry(epochSpentPowerKey, epochSpentPower + powerValue),
-        IntegerEntry(epochAddressSpentPowerKey, epochAddressSpentPower + powerValue)        
-      ] ++ processResultTuple._4 ++ updateCanditatesList
+        StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(","))  
+      ] ++ processResultTuple._4 ++ updateCanditatesList ++ addressRewordsRoundState
     }
   }
 }
@@ -316,16 +321,10 @@ func unvoteByNFT(voteId: String, assets: String) = {
     let voteUsedNftsKey = "vote_" + voteId + "_usedNfts"
 
     let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+    let voterVoteSpentPowerKey = "voter_" + addressStr + "_vote_" + voteId + "_spentPower"
 
     let addressPowerKey = "address_" + addressStr + "_power"
     let addressStakedNftsKey = "address_" + addressStr + "_stakedNfts"
-
-    let currentEpoch = getInteger(currentEpochKey).valueOrElse(0)
-    let epochSpentPowerKey = "epoch_" + currentEpoch.toString() + "_spentPower"
-    let epochAddressSpentPowerKey = "epoch_" + currentEpoch.toString() + "_address_" + addressStr + "_spentPower"
-
-    let epochSpentPower = getInteger(epochSpentPowerKey).valueOrErrorMessage("Epoch spent power not found")
-    let epochAddressSpentPower = getInteger(epochAddressSpentPowerKey).valueOrErrorMessage("Epoch address spent power not found")
 
     let upPowerDapp = getInteger(voteUpPowerKey).valueOrErrorMessage("Up vote power not found")
     let downPowerDapp = getInteger(voteDownPowerKey).valueOrErrorMessage("Down vote power not found")
@@ -335,18 +334,21 @@ func unvoteByNFT(voteId: String, assets: String) = {
     let voterSpentPower = getInteger(voterSpentPowerKey).valueOrErrorMessage("Voter spent power not found")
     let totalSpentPower = getInteger(totalSpentPowerKey).valueOrErrorMessage("Total spent power not found")
 
+    let voterVoteSpentPower = getInteger(voterVoteSpentPowerKey).valueOrErrorMessage("Address vote spent power not found")
+
     let addressPower = getInteger(addressPowerKey).valueOrErrorMessage("You don't have power")
     let addressStakedNfts = getString(addressStakedNftsKey).valueOrErrorMessage("You don't have staked NFTs")
 
     let assetsList = assets.split("|")
     func processAssets(accum: (Int, Int, List[String], List[DeleteEntry]), next: String) = {
-      let assetVote = getString("voter_" + addressStr + "_vote_" + voteId + "_assetId_" + next).valueOrErrorMessage("Vote asset data not found")
+      let assetVote = getString("voter_" + addressStr + "_vote_" + voteId + "_assetId_" + next).valueOrElse("")
       let parts = assetVote.split(":")
       let type = parts[0]
       let power = parseInt(parts[1]).valueOrElse(0)
       let stakedOwnerIndex = addressStakedNfts.indexOf(next).valueOrElse(-1)
 
-      if (power == 0) then throw("Power must be more zero")
+      if (assetVote.size() == 0) then accum
+      else if (power == 0) then throw("Power must be more zero")
       else if(stakedOwnerIndex == -1) then throw("Asset does not belong to you")
       else {
         let assetUsedIndex = accum._3.indexOf(next).valueOrElse(-1)
@@ -373,6 +375,7 @@ func unvoteByNFT(voteId: String, assets: String) = {
     else if (powerValue == 0) then throw("Not enough power to unvote")
     else if (processResultTuple._4.size() == 0) then throw("State entries list must not be empty")
     else {
+      let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
       let updateCanditatesList = if (totalVotePower - powerValue < VOTE_POWER_LIMIT) then removeItemFromStateArray(finalVotingCandidatesKey, voteId) else []
       [
         IntegerEntry(voterSpentPowerKey, voterSpentPower - powerValue),
@@ -380,13 +383,12 @@ func unvoteByNFT(voteId: String, assets: String) = {
 
         IntegerEntry(voteUpPowerKey, upPowerDapp - upPower),
         IntegerEntry(voteDownPowerKey, downPowerDapp - downPower),
-        StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(",")),
+        IntegerEntry(voteTotalPowerKey, totalVotePower - powerValue),
 
-        IntegerEntry(epochSpentPowerKey, epochSpentPower - powerValue),
-        IntegerEntry(epochAddressSpentPowerKey, epochAddressSpentPower - powerValue),
+        IntegerEntry(voterVoteSpentPowerKey, voterVoteSpentPower - powerValue),
 
-        IntegerEntry(voteTotalPowerKey, totalVotePower - powerValue)
-      ] ++ processResultTuple._4
+        StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(","))
+      ] ++ processResultTuple._4 ++ updateCanditatesList
     }
   }
 }
@@ -403,16 +405,18 @@ func fillTreasuary() = {
     let finalVotingCandidates = getString(finalVotingCandidatesKey).valueOrElse("")
     if (finalVotingCandidates.size() == 0) then throw("Canditates list is empty")
     else {
-      let currentEpoch = getInteger(currentEpochKey).valueOrElse(0)
       let finalVotingCandidatesList = finalVotingCandidates.split(",")
-      func processVote(accum: (Int, List[BooleanEntry]), next: String) = {
-        let voteUpPowerKey = "vote_" + next + "_upPower"
-        let voteDownPowerKey = "vote_" + next + "_downPower"
-        let voteTotalPowerKey = "vote_" + next + "_totalPower"
+      func processVote(accum: (Int, List[String], List[BooleanEntry], List[StringEntry]), next: String) = {
+        let voteId = next
+        let voteUpPowerKey = "vote_" + voteId + "_upPower"
+        let voteDownPowerKey = "vote_" + voteId + "_downPower"
+        let voteTotalPowerKey = "vote_" + voteId + "_totalPower"
 
         let voteUpPower = getInteger(voteUpPowerKey).valueOrElse(0)
         let voteDownPower = getInteger(voteDownPowerKey).valueOrElse(0)
         let voteTotalPower = getInteger(voteTotalPowerKey).valueOrElse(0)
+
+        let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
 
         if (voteTotalPower == 0) then throw("Invalid total power")
         else if (voteTotalPower < VOTE_POWER_LIMIT) then throw("Power less than limit")
@@ -421,31 +425,109 @@ func fillTreasuary() = {
           let upPercent = fraction(voteUpPower, 100, voteTotalPower)
           let finalVoteState =
             if (upPercent > 50)
-              then [BooleanEntry("vote_" + next + "_confirmed", true)]
-              else [BooleanEntry("vote_" + next + "_rejected", true)]
+              then [BooleanEntry("vote_" + voteId + "_confirmed", true)]
+              else [BooleanEntry("vote_" + voteId + "_rejected", true)]
           (
             accum._1 + voteTotalPower,
-            accum._2 :+ finalVoteState
+            accum._2 :+ voteId,
+            accum._3 :+ finalVoteState,
+            removeItemFromStateArray(finalVotingCandidatesKey, voteId)
           )
         }
       }
-      let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, []), processVote)
-      if (resultTuple._1 == 0) then throw("No power after process canditates")
+      let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, [], [], []), processVote)
+      let allEndVotesPower = resultTuple._1
+      let fianlVotesList = resultTuple._2
+      let finalVotesState = resultTuple._3
+      let updatedListFinalCanditates = resultTuple._4
+
+      if (allEndVotesPower == 0) then throw("No power after process canditates")
       else {
+        let currentRewordsRound = getInteger(currentRewordsRoundKey).valueOrElse(0)
+        let costPerPower = fraction(amount, 1, allEndVotesPower)
+
+        let treasuaryAssetIdTotalKey = "treasuary_" + assetId.toBase58String() + "_total"
+        let treasuaryAssetIdAvailableKey = "treasuary_" + assetId.toBase58String() + "_available"
+
+        let treasuaryAssetIdTotal = getInteger(treasuaryAssetIdTotalKey).valueOrElse(0)
+        let treasuaryAssetIdAvailable = getInteger(treasuaryAssetIdAvailableKey).valueOrElse(0)
         [
-          IntegerEntry(currentEpochKey, currentEpoch + 1)
-        ] ++ resultTuple._2
+          StringEntry("reward_" + currentRewordsRound.toString() + "_votesIds", fianlVotesList.makeString(",")),
+          StringEntry("reward_" + currentRewordsRound.toString() + "_assetId", assetId.toBase58String()),
+          IntegerEntry("reward_" + currentRewordsRound.toString() + "_costPerPower", costPerPower),
+
+          IntegerEntry(treasuaryAssetIdTotalKey, treasuaryAssetIdTotal + amount),
+          IntegerEntry(treasuaryAssetIdAvailableKey, treasuaryAssetIdAvailable + amount),
+
+          IntegerEntry(currentRewordsRoundKey, currentRewordsRound + 1)
+        ] ++ finalVotesState ++ updatedListFinalCanditates
       }
     }
-    # let treasuaryAssetIdAvailable = "treasuary_" + assetId.toBase58String() + "_available"
-    # let treasuaryAssetIdTotalReceived = "treasuary_" + assetId.toBase58String() + "_totalReceived"
+  }
+}
 
-    # let available = getInteger(treasuaryAssetIdAvailable).valueOrElse(0)
-    # let totalReceived = getInteger(treasuaryAssetIdTotalReceived).valueOrElse(0)
-    # [
-    #   IntegerEntry(treasuaryAssetIdAvailable, available + amount),
-    #   IntegerEntry(treasuaryAssetIdTotalReceived, totalReceived + amount)
-    # ] #++ addRewardsToAddresses(assetId.toBase58String(), amount)
+@Callable(i)
+func claimRewards() = {
+  let addressStr = i.caller.toString()
+
+  let adderssLastRewardRoundKey = "address_" + addressStr + "_lastRewardsRound"
+
+  let currentRewordsRound = getInteger(currentRewordsRoundKey).valueOrElse(0)
+  let adderssLastRewardRound = getInteger(adderssLastRewardRoundKey).valueOrElse(0)
+
+  if (currentRewordsRound == adderssLastRewardRound) then throw("There were no new payments")
+  else {
+    func calcRewardsRound(accum: (Int, List[ScriptTransfer|IntegerEntry]), next: Int) = {
+      if (accum._1 >= currentRewordsRound) then accum
+      else {
+        let votesIds = getString("reward_" + accum._1.toString() + "_votesIds").valueOrErrorMessage("Reward votes ids not found")
+        let assetId = getString("reward_" + accum._1.toString() + "_assetId").valueOrErrorMessage("Reward assetId not found")
+        let costPower = getInteger("reward_" + accum._1.toString() + "_costPerPower").valueOrErrorMessage("Reward cost power not found")
+
+        let treasuaryAssetIdClaimedKey = "treasuary_" + assetId + "_claimed"
+        let treasuaryAssetIdAvailableKey = "treasuary_" + assetId + "_available"
+        let treasuaryAssetIdClaimed = getInteger(treasuaryAssetIdClaimedKey).valueOrElse(0)
+        let treasuaryAssetIdAvailable = getInteger(treasuaryAssetIdAvailableKey).valueOrErrorMessage("Treasuary assetId not found")
+
+        let addressAssetIdClaimedKey = "rewardRound_" + accum._1.toString() + "_address_" + addressStr + "_assetId_" + assetId + "_claimed"
+        let addressAssetIdClaimed = getInteger(addressAssetIdClaimedKey).valueOrElse(0)
+
+        if (treasuaryAssetIdAvailable <= 0) then throw("Treasuary asset Id is empty")
+        else if (votesIds.size() == 0) then throw("Vote ids list are empty")
+        else if (assetId.size() == 0) then throw("Asset id is empty")
+        else if (costPower == 0 || costPower < 0) then throw("Invalid cost power")
+        else {
+          func calcAddressSpentPower(accum: Int, next: String) = {
+            let voteId = next
+            let addressSpentPower = getInteger("voter_" + addressStr + "_vote_" + voteId + "_spentPower").valueOrElse(0)
+            accum + addressSpentPower
+          }
+          let spentPower = FOLD<10>(votesIds.split(","), 0, calcAddressSpentPower)
+          if (spentPower <= 0 || addressAssetIdClaimed > 0) then {
+            # skip
+            (
+              accum._1 + next,
+              accum._2
+            )
+          } else {
+            (
+              accum._1 + next,
+              accum._2 :+ [
+                ScriptTransfer(i.caller, spentPower * costPower, assetId.fromBase58String()),
+                IntegerEntry(addressAssetIdClaimedKey, spentPower * costPower),
+                IntegerEntry(treasuaryAssetIdClaimedKey, treasuaryAssetIdClaimed + spentPower * costPower),
+                IntegerEntry(treasuaryAssetIdAvailableKey, treasuaryAssetIdAvailable - spentPower * costPower)
+              ]
+            )
+          }
+        }
+      }
+    }
+    # process 5 last rewards
+    let r = FOLD<5>([1,1,1,1,1], (adderssLastRewardRound, []), calcRewardsRound)
+    [
+      IntegerEntry(adderssLastRewardRoundKey, r._1)
+    ] ++ r._2
   }
 }
 
