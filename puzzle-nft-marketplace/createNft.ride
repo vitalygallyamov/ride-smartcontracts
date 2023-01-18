@@ -2,8 +2,6 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let marketplaceContractAddress = Address(base58'3PATXDVE53rKJtkwXYV3tvuLVS2fDtGtKCc')
-
 let issuersWhitelist = [
   "3P3iV85eXfkcA3Dd13EpZBYvs1vkKX6AYEN",
   "3PHFAavxj2ePJqFB46H2aRGA7oQL6kz1rJJ",
@@ -33,6 +31,11 @@ let editorsWhiteList = [
   "3P7NhmDt31ekQ2JryxtmdgZ1DXgVPwyocJK",
   "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi", # alexandra only for tsunami NFTs
   "3P6YATtrcTkMoEeuZVaUxnD99DuJeG15yao"  # tsunami team
+]
+
+let mintFromGroupWhiteList = [
+  Address(base58'3PATXDVE53rKJtkwXYV3tvuLVS2fDtGtKCc'),
+  Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD')
 ]
 
 let nftUltraStakingWrapper = Address(base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk')
@@ -209,7 +212,7 @@ func mintFromGroup(groupAssetIdStr: String) = {
   let groupAsset = assetInfo(groupAssetIdStr.fromBase58String()).value()
 
   if (groupAsset.checkNFT()) then {
-    if (i.caller == marketplaceContractAddress) then {
+    if (isDefined(mintFromGroupWhiteList.indexOf(i.caller))) then {
       let isGroup = getBoolean("nft_" + groupAssetIdStr + "_isGroup").valueOrElse(false)
       if (isGroup) then {
         let groupSize = getInteger("group_" + groupAssetIdStr + "_size").valueOrElse(0)
