@@ -18,7 +18,12 @@ let finalVotingCandidatesKey = "final_voiting_candidates"
 let allStakedAddressesKey = "all_staked_addresses"
 
 let whitelist = [
-  "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD"
+  "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD",
+  "3PQdNxynJy5mche2kxMVc5shXWzK8Gstq3o", # Ania
+  "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi", # Alex
+  "3PKHFX6W4aAr1e1b8MUTz5HmdWVUcjWhgY4", # Stanovoy
+  "3P7ZFPFW48Jnw6KvnSmB6oBmDVorNeCpWZ7", # Eugenia
+  "3PMcMiMEs6w56NRGacksXtFG5zS7doE9fpL"  # Vova
 ]
 
 # Check NFT and NFT issuer
@@ -223,6 +228,7 @@ func voteByNFT(voteId: String, assets: String) = {
     let voteUsedNftsKey = "vote_" + voteId + "_usedNfts"
 
     let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+    let voterVoteUsedNftsKey = "voter_" + addressStr + "_vote_" + voteId + "_usedNfts"
     let voterVoteSpentPowerKey = "voter_" + addressStr + "_vote_" + voteId + "_spentPower"
 
     let addressPowerKey = "address_" + addressStr + "_power"
@@ -234,6 +240,7 @@ func voteByNFT(voteId: String, assets: String) = {
     let voteUsedNfts = getString(voteUsedNftsKey).valueOrElse("")
 
     let voterSpentPower = getInteger(voterSpentPowerKey).valueOrElse(0)
+    let voterVoteUsedNfts = getString(voterVoteUsedNftsKey).valueOrElse("")
     let totalSpentPower = getInteger(totalSpentPowerKey).valueOrElse(0)
 
     let voterVoteSpentPower = getInteger(voterVoteSpentPowerKey).valueOrElse(0)
@@ -247,6 +254,9 @@ func voteByNFT(voteId: String, assets: String) = {
     let adderssLastRewardRound = getInteger(adderssLastRewardRoundKey).valueOrElse(0)
 
     let assetsList = assets.split("|")
+    let voteUsedNftsList = if voteUsedNfts.size() == 0 then [] else voteUsedNfts.split_51C(",")
+    let voterVoteUsedNftsList = if voterVoteUsedNfts.size() == 0 then [] else voterVoteUsedNfts.split_51C(",")
+
     func processAssets(accum: (Int, Int, List[String], List[StringEntry]), next: String) = {
       let parts = next.split("_")
       let nftId = parts[0]
@@ -257,7 +267,7 @@ func voteByNFT(voteId: String, assets: String) = {
       if (power == 0) then throw("Power must be more zero")
       else if(stakedOwnerIndex == -1) then throw("Asset does not belong to you")
       else {
-        let assetIndex = accum._3.indexOf(nftId).valueOrElse(-1)
+        let assetIndex = voteUsedNftsList.indexOf(nftId).valueOrElse(-1)
         if (assetIndex == -1) then {
           if (type != "up" && type != "down") then throw("Invalid type")
           else {
@@ -272,8 +282,7 @@ func voteByNFT(voteId: String, assets: String) = {
       }
     }
     # tuple (upCount, downCount, usedNftsList, stateEntries)
-    let voteUsedNftsList = if voteUsedNfts.size() == 0 then [] else voteUsedNfts.split_51C(",")
-    let processResultTuple = FOLD<5>(assetsList, (0, 0, voteUsedNftsList, []), processAssets)
+    let processResultTuple = FOLD<5>(assetsList, (0, 0, [], []), processAssets)
     let upPower = processResultTuple._1
     let downPower = processResultTuple._2
     let powerValue = upPower + downPower
@@ -301,8 +310,9 @@ func voteByNFT(voteId: String, assets: String) = {
         IntegerEntry(voteTotalPowerKey, totalVotePower + powerValue),
 
         IntegerEntry(voterVoteSpentPowerKey, voterVoteSpentPower + powerValue),
+        StringEntry(voterVoteUsedNftsKey, (voterVoteUsedNftsList ++ processResultTuple._3).makeString_11C(",")),
 
-        StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(","))  
+        StringEntry(voteUsedNftsKey, (voteUsedNftsList ++ processResultTuple._3).makeString_11C(","))  
       ] ++ processResultTuple._4 ++ updateCanditatesList ++ addressRewordsRoundState
     }
   }
@@ -313,7 +323,6 @@ func unvoteByNFT(voteId: String, assets: String) = {
   let addressStr = i.caller.toString()
   let collectionId = getString("vote_" + voteId + "_collectionId").valueOrElse("")
   if (collectionId.size() == 0) then throw("Collection not found")
-  else if (assets.size() == 0) then throw("Assets list is empty")
   else {
     let voteUpPowerKey = "vote_" + voteId + "_upPower"
     let voteDownPowerKey = "vote_" + voteId + "_downPower"
@@ -321,6 +330,7 @@ func unvoteByNFT(voteId: String, assets: String) = {
     let voteUsedNftsKey = "vote_" + voteId + "_usedNfts"
 
     let voterSpentPowerKey = "voter_" + addressStr + "_spentPower"
+    let voterVoteUsedNftsKey = "voter_" + addressStr + "_vote_" + voteId + "_usedNfts"
     let voterVoteSpentPowerKey = "voter_" + addressStr + "_vote_" + voteId + "_spentPower"
 
     let addressPowerKey = "address_" + addressStr + "_power"
@@ -332,6 +342,8 @@ func unvoteByNFT(voteId: String, assets: String) = {
     let voteUsedNfts = getString(voteUsedNftsKey).valueOrErrorMessage("Vote used power not found")
 
     let voterSpentPower = getInteger(voterSpentPowerKey).valueOrErrorMessage("Voter spent power not found")
+    let voterUsedNfts = getInteger(voterVoteUsedNftsKey).valueOrErrorMessage("Voter vote used nfts not found")
+    let voterVoteUsedNfts = getString(voterVoteUsedNftsKey).valueOrErrorMessage("Voter vote used nfts list not found")
     let totalSpentPower = getInteger(totalSpentPowerKey).valueOrErrorMessage("Total spent power not found")
 
     let voterVoteSpentPower = getInteger(voterVoteSpentPowerKey).valueOrErrorMessage("Address vote spent power not found")
@@ -339,17 +351,24 @@ func unvoteByNFT(voteId: String, assets: String) = {
     let addressPower = getInteger(addressPowerKey).valueOrErrorMessage("You don't have power")
     let addressStakedNfts = getString(addressStakedNftsKey).valueOrErrorMessage("You don't have staked NFTs")
 
-    let assetsList = assets.split("|")
-    func processAssets(accum: (Int, Int, List[String], List[DeleteEntry]), next: String) = {
+    let assetsList =
+      if assets.size() > 0 then {
+        assets.split("|")
+      } else {
+        if (voterVoteUsedNfts.size() == 0) then [] else voterVoteUsedNfts.split(",")
+      }
+    func processAssets(accum: (Int, Int, List[String], List[String], List[DeleteEntry]), next: String) = {
       let assetVote = getString("voter_" + addressStr + "_vote_" + voteId + "_assetId_" + next).valueOrElse("")
       let parts = assetVote.split(":")
       let type = parts[0]
       let power = parseInt(parts[1]).valueOrElse(0)
+
       let stakedOwnerIndex = addressStakedNfts.indexOf(next).valueOrElse(-1)
+      let voterVoteUsedIndex = accum._4.indexOf(next).valueOrErrorMessage("Voter vote used index not found")
 
       if (assetVote.size() == 0) then accum
       else if (power == 0) then throw("Power must be more zero")
-      else if(stakedOwnerIndex == -1) then throw("Asset does not belong to you")
+      else if(voterVoteUsedIndex < 0 && stakedOwnerIndex == -1) then throw("Asset does not belong to you")
       else {
         let assetUsedIndex = accum._3.indexOf(next).valueOrElse(-1)
         if (assetUsedIndex >= 0) then {
@@ -359,21 +378,22 @@ func unvoteByNFT(voteId: String, assets: String) = {
               accum._1 + if (type == "up") then power else 0,
               accum._2 + if (type == "down") then power else 0,
               accum._3.removeByIndex(assetUsedIndex),
-              accum._4 :+ DeleteEntry("voter_" + addressStr + "_vote_" + voteId + "_assetId_" + next)
+              accum._4.removeByIndex(voterVoteUsedIndex),
+              accum._5 :+ DeleteEntry("voter_" + addressStr + "_vote_" + voteId + "_assetId_" + next)
             )
           }
         } else accum
       }
     }
-    # tuple (upCount, downCount, usedNftsList, stateEntries)
-    let processResultTuple = FOLD<5>(assetsList, (0, 0, voteUsedNfts.split_51C(","), []), processAssets)
+    # tuple (upCount, downCount, usedNftsList, voterVoteUsedNfts, stateEntries)
+    let processResultTuple = FOLD<5>(assetsList, (0, 0, voteUsedNfts.split_51C(","), voterVoteUsedNfts.split_51C(","), []), processAssets)
     let upPower = processResultTuple._1
     let downPower = processResultTuple._2
     let powerValue = upPower + downPower
 
-    if (powerValue > addressPower) then throw("Power exceeds power of the account")
+    if (powerValue > voterSpentPower) then throw("Power value exceeds voter spent power")
     else if (powerValue == 0) then throw("Not enough power to unvote")
-    else if (processResultTuple._4.size() == 0) then throw("State entries list must not be empty")
+    else if (processResultTuple._5.size() == 0) then throw("State entries list must not be empty")
     else {
       let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
       let updateCanditatesList = if (totalVotePower - powerValue < VOTE_POWER_LIMIT) then removeItemFromStateArray(finalVotingCandidatesKey, voteId) else []
@@ -386,9 +406,10 @@ func unvoteByNFT(voteId: String, assets: String) = {
         IntegerEntry(voteTotalPowerKey, totalVotePower - powerValue),
 
         IntegerEntry(voterVoteSpentPowerKey, voterVoteSpentPower - powerValue),
+        StringEntry(voterVoteUsedNftsKey, processResultTuple._4.makeString_11C(",")),
 
         StringEntry(voteUsedNftsKey, processResultTuple._3.makeString_11C(","))
-      ] ++ processResultTuple._4 ++ updateCanditatesList
+      ] ++ processResultTuple._5 ++ updateCanditatesList
     }
   }
 }
