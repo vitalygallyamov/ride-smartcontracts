@@ -219,7 +219,8 @@ func removeFromVote(voteId: String) = {
 func voteByNFT(voteId: String, assets: String) = {
   let addressStr = i.caller.toString()
   let collectionId = getString("vote_" + voteId + "_collectionId").valueOrElse("")
-  if (collectionId.size() == 0) then throw("Collection not found")
+  if (isVotingClosed(voteId)) then throw("Voting is closed")
+  else if (collectionId.size() == 0) then throw("Collection not found")
   else if (assets.size() == 0) then throw("Assets list is empty")
   else {
     let voteUpPowerKey = "vote_" + voteId + "_upPower"
@@ -322,7 +323,8 @@ func voteByNFT(voteId: String, assets: String) = {
 func unvoteByNFT(voteId: String, assets: String) = {
   let addressStr = i.caller.toString()
   let collectionId = getString("vote_" + voteId + "_collectionId").valueOrElse("")
-  if (collectionId.size() == 0) then throw("Collection not found")
+  if (isVotingClosed(voteId)) then throw("Voting is closed")
+  else if (collectionId.size() == 0) then throw("Collection not found")
   else {
     let voteUpPowerKey = "vote_" + voteId + "_upPower"
     let voteDownPowerKey = "vote_" + voteId + "_downPower"
@@ -442,12 +444,20 @@ func fillTreasuary() = {
         if (voteTotalPower == 0) then throw("Invalid total power")
         else if (voteTotalPower < VOTE_POWER_LIMIT) then throw("Power less than limit")
         else if (voteUpPower + voteDownPower == 0) then throw("Invalid up, down power")
+        else if (isVotingClosed(voteId)) then {
+          (
+            accum._1,
+            accum._2,
+            accum._3,
+            removeItemFromStateArray(finalVotingCandidatesKey, voteId)
+          )
+        }
         else {
           let upPercent = fraction(voteUpPower, 100, voteTotalPower)
           let finalVoteState =
             if (upPercent > 50)
-              then [BooleanEntry("vote_" + voteId + "_confirmed", true)]
-              else [BooleanEntry("vote_" + voteId + "_rejected", true)]
+              then BooleanEntry("vote_" + voteId + "_confirmed", true)
+              else BooleanEntry("vote_" + voteId + "_rejected", true)
           (
             accum._1 + voteTotalPower,
             accum._2 :+ voteId,
@@ -458,7 +468,7 @@ func fillTreasuary() = {
       }
       let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, [], [], []), processVote)
       let allEndVotesPower = resultTuple._1
-      let fianlVotesList = resultTuple._2
+      let finalVotesList = resultTuple._2
       let finalVotesState = resultTuple._3
       let updatedListFinalCanditates = resultTuple._4
 
@@ -473,9 +483,10 @@ func fillTreasuary() = {
         let treasuaryAssetIdTotal = getInteger(treasuaryAssetIdTotalKey).valueOrElse(0)
         let treasuaryAssetIdAvailable = getInteger(treasuaryAssetIdAvailableKey).valueOrElse(0)
         [
-          StringEntry("reward_" + currentRewordsRound.toString() + "_votesIds", fianlVotesList.makeString(",")),
+          StringEntry("reward_" + currentRewordsRound.toString() + "_votesIds", finalVotesList.makeString(",")),
           StringEntry("reward_" + currentRewordsRound.toString() + "_assetId", assetId.toBase58String()),
           IntegerEntry("reward_" + currentRewordsRound.toString() + "_costPerPower", costPerPower),
+          IntegerEntry("reward_" + currentRewordsRound.toString() + "_paidPower", allEndVotesPower),
 
           IntegerEntry(treasuaryAssetIdTotalKey, treasuaryAssetIdTotal + amount),
           IntegerEntry(treasuaryAssetIdAvailableKey, treasuaryAssetIdAvailable + amount),
@@ -533,7 +544,7 @@ func claimRewards() = {
           } else {
             (
               accum._1 + next,
-              accum._2 :+ [
+              accum._2 ++ [
                 ScriptTransfer(i.caller, spentPower * costPower, assetId.fromBase58String()),
                 IntegerEntry(addressAssetIdClaimedKey, spentPower * costPower),
                 IntegerEntry(treasuaryAssetIdClaimedKey, treasuaryAssetIdClaimed + spentPower * costPower),
