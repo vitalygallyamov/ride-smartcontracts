@@ -163,7 +163,6 @@ func mint(name: String, desc: String, collection: String, preview: String, origi
 
         IntegerEntry("collection_" + collectionDomain + "_size", nftNum),
         StringEntry("collection_" + collectionDomain + "_assetId_" + assetIdStr, assetIdStr),
-        StringEntry("collection_" + collectionDomain + "_assetId", assetIdStr),
 
         asset,
         ScriptTransfer(i.caller, 1, assetId)
@@ -196,8 +195,6 @@ func mint(name: String, desc: String, collection: String, preview: String, origi
           IntegerEntry("group_" + assetIdStr + "_size", amount),
           IntegerEntry("group_" + assetIdStr + "_available", amount),
           StringEntry("group_" + assetIdStr + "_collectionDomain", collectionDomain),
-
-          StringEntry("collection_" + collectionDomain + "_assetId", assetIdStr),
 
           asset,
           ScriptTransfer(i.caller, 1, assetId)
@@ -366,22 +363,6 @@ func editImageNFT(id: String, newImageUrl: String) = {
       ]
     }
   }
-}
-
-@Callable(i)
-func updateFormat(id: String) = {
-  let asset = assetInfo(id.fromBase58String()).valueOrErrorMessage("invalid asset Id")
-  let assetIdStr = asset.id.toBase58String()
-  let data = tryGetString("nft_" + assetIdStr + "_data")
-
-  let partsData = data.split(", ")
-  let partsCollection = partsData[0].split(": ")
-  let collectionDomain = partsCollection[1].drop(1).dropRight(1)
-  if (collectionDomain.size() > 0) then {
-    [
-      StringEntry("collection_" + collectionDomain + "_assetId", assetIdStr)
-    ]
-  } else throw("Invalid collection name")
 }
 
 @Verifier(tx)

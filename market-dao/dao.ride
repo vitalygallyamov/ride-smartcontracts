@@ -40,12 +40,6 @@ func getPowerNFT(asset: Asset) = {
   if params == "gold" then 100 else 40
 }
 
-func getCollectionIssuer(collectionId: String) = {
-  let assetId = getString(creationAddress, "collection_" + collectionId + "_assetId").valueOrElse("")
-
-  getString(creationAddress, "nft_" + assetId + "_issuer").valueOrElse("")
-}
-
 func isVotingClosed(voteId: String) = {
   let voteConfirmedKey = "vote_" + voteId + "_confirmed"
   let voteRejectedKey = "vote_" + voteId + "_rejected"
@@ -174,7 +168,7 @@ func unstake(nftIdStr: String) = {
 
 @Callable(i)
 func sendToVote(collectionId: String) = {
-  let issuer = collectionId.getCollectionIssuer()
+  let issuer = collectionId.split("_")[0]
   let isExist = match (getString("collection_" + collectionId + "_voteId")) {
       case t:String => true
       case _ => false
@@ -186,11 +180,13 @@ func sendToVote(collectionId: String) = {
   else {
     let voteId = sha256_16Kb(collectionId.toBytes()).toBase58String()
     let totalVotes = getInteger("total_votes").valueOrElse(0)
+    let quorumLimit = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
     [
       StringEntry("collection_" + collectionId + "_voteId", voteId),
       StringEntry("vote_" + voteId + "_collectionId", collectionId),
       StringEntry("vote_" + voteId + "_owner", i.caller.toString()),
       IntegerEntry("vote_" + voteId + "_createdAt", height),
+      IntegerEntry("vote_" + voteId + "_quorum", quorumLimit),
       IntegerEntry("total_votes", totalVotes + 1)
     ]
   }
@@ -209,6 +205,7 @@ func removeFromVote(voteId: String) = {
       DeleteEntry("vote_" + voteId + "_collectionId"),
       DeleteEntry("vote_" + voteId + "_owner"),
       DeleteEntry("vote_" + voteId + "_createdAt"),
+      DeleteEntry("vote_" + voteId + "_quorum"),
       IntegerEntry("total_votes", totalVotes - 1)
     ]
   }
