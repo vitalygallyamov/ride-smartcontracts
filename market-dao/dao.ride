@@ -290,8 +290,8 @@ func voteByNFT(voteId: String, assets: String) = {
     else if (processResultTuple._3.size() == 0) then throw("Used list must not be empty")
     else if (processResultTuple._4.size() == 0) then throw("State entries list must not be empty")
     else {
-      let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
-      let updateCanditatesList = if (totalVotePower + powerValue > VOTE_POWER_LIMIT)
+      let quorumLimit = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
+      let updateCanditatesList = if (totalVotePower + powerValue > quorumLimit)
         then addStringToStateArray(finalVotingCandidatesKey, voteId)
         else []
 
@@ -394,8 +394,8 @@ func unvoteByNFT(voteId: String, assets: String) = {
     else if (powerValue == 0) then throw("Not enough power to unvote")
     else if (processResultTuple._5.size() == 0) then throw("State entries list must not be empty")
     else {
-      let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
-      let updateCanditatesList = if (totalVotePower - powerValue < VOTE_POWER_LIMIT) then removeItemFromStateArray(finalVotingCandidatesKey, voteId) else []
+      let quorumLimit = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
+      let updateCanditatesList = if (totalVotePower - powerValue < quorumLimit) then removeItemFromStateArray(finalVotingCandidatesKey, voteId) else []
       [
         IntegerEntry(voterSpentPowerKey, voterSpentPower - powerValue),
         IntegerEntry(totalSpentPowerKey, totalSpentPower - powerValue),
@@ -436,10 +436,10 @@ func fillTreasuary() = {
         let voteDownPower = getInteger(voteDownPowerKey).valueOrElse(0)
         let voteTotalPower = getInteger(voteTotalPowerKey).valueOrElse(0)
 
-        let VOTE_POWER_LIMIT = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
+        let quorumLimit = getInteger(votePowerLimitKey).valueOrErrorMessage("Vote power limit not found")
 
         if (voteTotalPower == 0) then throw("Invalid total power")
-        else if (voteTotalPower < VOTE_POWER_LIMIT) then throw("Power less than limit")
+        else if (voteTotalPower < quorumLimit) then throw("Power less than limit")
         else if (voteUpPower + voteDownPower == 0) then throw("Invalid up, down power")
         else if (isVotingClosed(voteId)) then {
           (
