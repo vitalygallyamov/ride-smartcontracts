@@ -3,6 +3,7 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let creationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+let signArtIssuerAddress = Address(base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV')
 
 let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
 
@@ -17,27 +18,41 @@ let finalVotingCandidatesKey = "final_voiting_candidates"
 
 let allStakedAddressesKey = "all_staked_addresses"
 
-let whitelist = [
-  "3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD",
-  "3PQdNxynJy5mche2kxMVc5shXWzK8Gstq3o", # Ania
-  "3PCyjqHhtq9f9Hmn4LNsWwA68dFVsvQ6iNi", # Alex
-  "3PKHFX6W4aAr1e1b8MUTz5HmdWVUcjWhgY4", # Stanovoy
-  "3P7ZFPFW48Jnw6KvnSmB6oBmDVorNeCpWZ7", # Eugenia
-  "3PMcMiMEs6w56NRGacksXtFG5zS7doE9fpL"  # Vova
+let PuzzleDragonsSignArtIds = [
+  "9iPLsYoz8fNyUp9qcgeAFPpMjKGcb4mNURhAZ7dfzXej",
+  "2K847GdAcqaHHYn1dSS1F3NYriuquJKKzMoBES1cn4Mb",
+  "7D1eCVeMbjHLpjYuqKZ96LoWPwD71quwuWpZxcuKnkJ7",
+  "zjE5dwTv3AukQj6xMyddjcqA82bKvSNLeaKLhnFYKGf",
+  "4T8QSrLLqUpHpi8SecSQT1p5tGo1CAskTGgYgUmXBYEb",
+  "AjHkvxJpgxx8UAMmz6gvxjtBanGBHeEUaYxygdsTRcV6",
+  "4jruFM1gvrtMHXiKdz2EKt12fHGjH5MT8YcZkF6KVGP7",
+  "ZZ1cM8N3UC3uAdoCXJwTwkmpeTSFjpNB4GVa5UwYVGS",
+  "6UAvojJpFxUjAoRFb3nhxCRUdGzFCvxCKniLtJqxVk77",
+  "2NSvp5JX8YTNXWKXpE9kiZA22gg4DM2Yc7mcb9U6PkxB"
 ]
 
 # Check NFT and NFT issuer
 func checkNFT(asset: Asset) = {
-  getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_issuer") == this.toString() &&
-  asset.issuer == creationAddress &&
+  let isPuzzleDragon = match(PuzzleDragonsSignArtIds.indexOf(asset.id.toBase58String())) {
+    case x:Int => x >= 0
+    case _ => false
+  }
+  (isPuzzleDragon || getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_issuer") == this.toString()) &&
+  asset.issuer == (if isPuzzleDragon then signArtIssuerAddress else creationAddress) &&
   asset.decimals == 0 &&
   asset.reissuable == false &&
   asset.quantity == 1
 }
 
 func getPowerNFT(asset: Asset) = {
-  let params = getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_params")
-  if params == "gold" then 100 else 40
+  let isPuzzleDragon = match(PuzzleDragonsSignArtIds.indexOf(asset.id.toBase58String())) {
+    case x:Int => x >= 0
+    case _ => false
+  }
+  if (isPuzzleDragon) then 40 else {
+    let params = getStringValue(creationAddress, "nft_" + asset.id.toBase58String() + "_params")
+    if params == "gold" then 100 else 40
+  }
 }
 
 func isVotingClosed(voteId: String) = {
@@ -76,11 +91,14 @@ func removeItemFromStateArray(dataKey: String, item: String) = {
 }
 
 @Callable(i)
-func stake() = {
+func stake(debug: Boolean) = {
   let addressStr = i.caller.toString()
-  let p = i.payments[0].valueOrErrorMessage("No payments")
+  let p = if (i.payments.size() > 0) then i.payments[0] else throw("Payments list is empty")
   let asset = assetInfo(p.assetId.valueOrErrorMessage("Invalid payment")).valueOrErrorMessage("Invalid asset Id")
-  if (p.amount > 0 && asset.checkNFT()) then {
+  if (debug) then {
+    throw("payments size " + i.payments.size().toString() + " assetId " + p.assetId.value().toBase58String() + " amount " + p.amount.toString())
+  }
+  else if (p.amount > 0 && asset.checkNFT()) then {
     # global params
     let totalStaked = getInteger(totalStakedKey).valueOrElse(0)
     let totalPower = getInteger(totalPowerKey).valueOrElse(0)
@@ -118,11 +136,11 @@ func stake() = {
       ] ++ addStringToStateArray(allStakedAddressesKey, addressStr) ++ addressStakedNftsState
     }
   }
-  else throw("No payments")
+  else throw("Invalid payment asset Id or amount")
 }
 
 @Callable(i)
-func unstake(nftIdStr: String) = {
+func unstake(nftIdStr: String, debug: Boolean) = {
   let addressStr = i.caller.toString()
   let asset = assetInfo(nftIdStr.fromBase58String()).valueOrErrorMessage("Invalid nft Id")
   let ownerAddress = getString("nft_" + nftIdStr + "_owner").valueOrErrorMessage("Owner data invalid")
@@ -175,7 +193,6 @@ func sendToVote(collectionId: String) = {
     }
   if (issuer.size() == 0) then throw("Collection issuer not found")
   else if (isExist) then throw("Collection has already been submitted for voting")
-  else if (whitelist.indexOf(i.caller.toString()) == unit) then throw("Functionality temporarily unavailable")
   else if (issuer != i.caller.toString()) then throw("Only the issuer can submit to the vote")
   else {
     let voteId = sha256_16Kb(collectionId.toBytes()).toBase58String()
