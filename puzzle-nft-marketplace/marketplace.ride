@@ -13,6 +13,7 @@ let adminAddress = Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD')
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
+let nftWavesDomainsWrapper = base58'3P6EXY5LjsD8xth9GHemxemFHqCL4QzJSaU'
 
 let duckFeeAddress = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
 

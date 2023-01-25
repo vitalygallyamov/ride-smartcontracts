@@ -1,0 +1,148 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let nftCreationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
+let wavesRegistryAddress = Address(base58'3P6utP25F4wMUGG4hGdDtMXMKu2tTeNkgRs')
+
+
+func key_entity(name: String, pk: String, property: String) = name + "_" + pk + "_" + property
+func key_Token_locker(domainsNftId: String) = key_entity("Token", domainsNftId, "locker")
+func key_Wrapped_token(wrappedNftId: String) = key_entity("Wrapped", wrappedNftId, "tokenId")
+
+
+func findNftIssuedBy(assetId: ByteVector | Unit, issuer: Address) =
+    if !assetId.isDefined() then unit else match assetInfo(assetId.value()) {
+        case maybeNft: Asset =>
+            if maybeNft.issuer == issuer
+                && maybeNft.decimals == 0
+                && maybeNft.reissuable == false
+                && maybeNft.quantity == 1
+            then maybeNft
+            else unit
+        case _ => unit
+    }
+
+
+@Callable(i)
+func lock() = {
+    let callerStr = i.caller.toString()
+    let assetId = i.payments[0].assetId
+
+    let domainsNft = if i.payments.size() != 1 then
+        throw("Only single payment required")
+    else
+        findNftIssuedBy(assetId, wavesRegistryAddress)
+            .valueOrErrorMessage("Payment must contain Waves Domains NFT")
+
+    let domainsNftIdStr = domainsNft.id.toBase58String()
+
+    let labels = domainsNft.description.split(".")
+    let name = if labels.size() == 2 && labels[1] == "waves" then labels[0] else "~"
+
+    let isActiveName = match wavesRegistryAddress.invoke(
+            "isActive", [name], nil
+        ) {
+            case maybeActive: Boolean => maybeActive
+            case _ => false
+        }
+    strict onlyActiveNameCanBeLocked =
+        if isActiveName then unit else throw("`" + name + "` is not active")
+
+    let imageLink = "https://app.waves.domains/api/v1/nft-img/" + domainsNftIdStr
+
+    strict wrappedNftIdStr =
+        match nftCreationAddress.invoke(
+                "createNft",
+                [domainsNft.name, domainsNft.description, imageLink, "WavesDomains"],
+                nil
+        ) {
+            case maybeNftId: String => maybeNftId
+            case _ => throw("Something went wrong during creation of NFT")
+        }
+    
+    (
+        [
+            ScriptTransfer(i.caller, 1, wrappedNftIdStr.fromBase58String()),
+
+            StringEntry(key_Token_locker(domainsNftIdStr), callerStr),
+            StringEntry(key_Wrapped_token(wrappedNftIdStr), domainsNftIdStr)
+        ],
+        wrappedNftIdStr
+    )
+}
+
+
+@Callable(i)
+func unlock() = {
+    let callerStr = i.caller.toString()
+    let assetId = i.payments[0].assetId
+
+    let wrappedNft = if i.payments.size() != 1 then
+        throw("Only single payment required")
+    else
+        findNftIssuedBy(assetId, nftCreationAddress)
+            .valueOrErrorMessage("Payment must contain wrapped Waves Domains NFT")
+
+    let wrappedNftIdStr = wrappedNft.id.toBase58String()
+
+    let domainsNftIdStr = getStringValue(key_Wrapped_token(wrappedNftIdStr))
+    let domainsNftId = domainsNftIdStr.fromBase58String()
+    let tokenLocker = getStringValue(key_Token_locker(domainsNftIdStr))
+
+    if (tokenLocker != callerStr) then
+        throw("This NFT does not belongs to you")
+    else {
+        strict burnWrappedNft =
+            nftCreationAddress.invoke("burnNFT", [], [AttachedPayment(wrappedNft.id, 1)])
+
+        (
+            [
+                ScriptTransfer(i.caller, 1, domainsNftId),
+
+                DeleteEntry(key_Wrapped_token(wrappedNftIdStr)),
+                DeleteEntry(key_Token_locker(domainsNftIdStr))
+            ],
+            domainsNftIdStr
+        )
+    }
+}
+
+
+@Verifier(tx)
+func verify() = {
+    let maybeOracle = this.getString("Oracle").valueOrElse("").addressFromString()
+    let maybeAdminKeys =
+        if maybeOracle.isDefined() then maybeOracle.value().getString("AdminKeys") else unit
+
+    match maybeAdminKeys {
+        case adminKeysStr: String => {
+            let adminKeys = {
+                let stringKeys = adminKeysStr.split(",")
+
+                [
+                    stringKeys[0].fromBase58String(),
+                    stringKeys[1].fromBase58String(),
+                    stringKeys[2].fromBase58String()
+                ]
+            }
+
+            func verifyByAllKeys(proof: ByteVector) = {
+                if sigVerify(tx.bodyBytes, proof, adminKeys[0]) then
+                    1
+                else if sigVerify(tx.bodyBytes, proof, adminKeys[1]) then
+                    10
+                else if sigVerify(tx.bodyBytes, proof, adminKeys[2]) then
+                    100
+                else
+                    0
+            }
+
+            [110, 101, 11].containsElement(
+                tx.proofs[0].verifyByAllKeys()
+                + tx.proofs[1].verifyByAllKeys()
+            )
+        }
+        case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+    }
+}

@@ -12,6 +12,7 @@ let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
 let nftUltraStakingWrapper = base58'3PKVgd6ds1xervK6bPXbEHBqg8ibTcf5HZk'
 let nftWavesPunksWrapper = base58'3PD1sd55PYzmGUrQ896Qt3uvdbtgjCVpajE'
 let nftWavesLandsWrapper = base58'3PCW9q51iwFiaDZB8SSRgc7jqjYgTgQy5T3'
+let nftWavesDomainsWrapper = base58'3P6EXY5LjsD8xth9GHemxemFHqCL4QzJSaU'
 
 # ducks contracts for create nft
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
@@ -28,6 +29,9 @@ let madPunks2IssuerAddress = Address(base58'3P8LcmWrr9SFrxwheZQENov5fPHEWtiwroN'
 
 # waves lands
 let wlIssuerAddress = Address(base58'3PLncXtS1U83D6cQbFD3H8rBHPLgzxSFKZ1')
+
+# waves domains
+let wavesDomainsIssuerAddress = Address(base58'3P6utP25F4wMUGG4hGdDtMXMKu2tTeNkgRs')
 
 
 # check Waves Lands NFT
@@ -70,6 +74,11 @@ func ifUltraStakingNft(asset: Asset) = {
   isEagleNFT || isAniaNFT
 }
 
+# check waves domains NFT
+func ifWavesDomainsNft(asset: Asset) = {
+  asset.issuer == wavesDomainsIssuerAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
+}
+
 # check marketplace NFT
 func isNftFromMarketplace(asset: Asset) = {
   asset.issuer.bytes == nftCreationAddress && asset.decimals == 0 && asset.reissuable == false && asset.quantity == 1
@@ -82,6 +91,7 @@ func getAddressForWrap(asset: Asset) = {
   else if (asset.ifSignArtNft()) then Address(nftSignArtWrapper)
   else if(asset.ifDuckNft()) then Address(nftDuckWrapper)
   else if(asset.ifWavesLandsNFT()) then Address(nftWavesLandsWrapper)
+  else if (asset.ifWavesDomainsNft()) then Address(nftWavesDomainsWrapper)
   else unit
 }
 
@@ -109,6 +119,11 @@ func getAddressForUnwrap(nftStr: String) = {
     case s: String => s.size() > 0
     case _ => false
   }
+
+  let isWavesDomains = match (getString(Address(nftWavesDomainsWrapper), "Wrapped_" + nftStr + "_tokenId")) {
+    case s: String => s.size() > 0
+    case _ => false
+  }
   
   if (isUltraStaking) then {
     Address(nftUltraStakingWrapper)
@@ -120,6 +135,8 @@ func getAddressForUnwrap(nftStr: String) = {
     Address(nftDuckWrapper)
   } else if (isWavesLands) then {
     Address(nftWavesLandsWrapper)
+  } else if (isWavesDomains) then {
+    Address(nftWavesDomainsWrapper)
   } else unit
 }
 
