@@ -53,7 +53,7 @@ func lock() = {
 
     strict wrappedNftIdStr =
         match nftCreationAddress.invoke(
-                "createNft",
+                "createNFT",
                 [domainsNft.name, domainsNft.description, imageLink, "WavesDomains"],
                 nil
         ) {
