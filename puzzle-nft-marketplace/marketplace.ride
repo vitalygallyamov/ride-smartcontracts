@@ -2,6 +2,8 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
+let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
+
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 let marketFeeAddress = Address(base58'3PKvcEmyHvo2PRsKhpKrDjmSNmnsuHn3UBR')
 let DAOAddress = Address(base58'3P975LUuqc7uBPiSxp3nemf2FZh62zfirSh')
@@ -13,7 +15,6 @@ let adminAddress = Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD')
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
-let nftWavesDomainsWrapper = base58'3P6EXY5LjsD8xth9GHemxemFHqCL4QzJSaU'
 
 let duckFeeAddress = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
 
@@ -192,6 +193,8 @@ func buyNFT(nftId: String) = {
           DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
           DeleteEntry("nft_" + nftId + "_sellerComment"),
           DeleteEntry("nft_" + nftId + "_seller"),
+          DeleteEntry("nft_" + nftId + "_pinned"),
+          DeleteEntry("nft_" + nftId + "_pinnedHeight"),
           DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
           DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
           DeleteEntry(auctionKey)
@@ -213,6 +216,8 @@ func buyNFT(nftId: String) = {
             DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
             DeleteEntry("nft_" + nftId + "_sellerComment"),
             DeleteEntry("nft_" + nftId + "_seller"),
+            DeleteEntry("nft_" + nftId + "_pinned"),
+            DeleteEntry("nft_" + nftId + "_pinnedHeight"),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
             DeleteEntry(auctionKey)
@@ -243,11 +248,75 @@ func cancelSell(nftId: String) = {
       DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
       DeleteEntry("nft_" + nftId + "_sellerComment"),
       DeleteEntry("nft_" + nftId + "_seller"),
+      DeleteEntry("nft_" + nftId + "_pinned"),
+      DeleteEntry("nft_" + nftId + "_pinnedHeight"),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
       DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
       DeleteEntry(auctionKey)
     ] ++ allTransfersForBid(nftAsset.id.toBase58String(), ""), nftId)
   } else throw("You are not a seller")
+}
+
+@Callable(i)
+func pin(nftId: String) = {
+  let sellerStr = tryGetString("nft_" + nftId + "_seller")
+  let isPinned = getBoolean("nft_" + nftId + "_pinned").valueOrElse(false)
+  let pinnedHeight = getInteger("nft_" + nftId + "_pinnedHeight").valueOrElse(0)
+  let blocks24h = 60 * 24
+
+  let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+  let isDaoStaker = match(getString(DAOAddress, "all_staked_addresses")) {
+    case s:String => isDefined(s.indexOf(i.caller.toString()))
+    case _ => false
+  }
+
+  if (sellerStr.size() == 0) then throw("Seller not found")
+  else if (isPinned) then throw("NFT alredy pinned")
+  else if (height - pinnedHeight <= blocks24h) then throw("Time hasn't run out")
+  else if (sellerStr != i.originCaller.toString()) then throw("You are not a seller")
+  else {
+    let paymentTransfer =
+      if (isDaoStaker) then [] 
+      else if (i.payments.size() == 0) then throw("No payment")
+      else if (
+        i.payments[0].assetId.valueOrErrorMessage("Only USDT") != USDTAssetId ||
+        i.payments[0].amount < 7_000_000
+      ) then throw("Only 7 USDT")
+      else
+      {
+        let half = fraction(i.payments[0].amount, 1, 2)
+        [
+          ScriptTransfer(marketFeeAddress, half, USDTAssetId),
+          ScriptTransfer(DAOAddress, i.payments[0].amount - half, USDTAssetId)
+        ]
+      }
+    [
+      BooleanEntry("nft_" + nftAsset.id.toBase58String() + "_pinned", true),
+      IntegerEntry("nft_" + nftAsset.id.toBase58String() + "_pinnedHeight", height + blocks24h)
+    ] ++ paymentTransfer
+  }
+}
+
+@Callable(i)
+func unpin(nftId: String) = {
+  let sellerStr = tryGetString("nft_" + nftId + "_seller")
+  let isPinned = getBoolean("nft_" + nftId + "_pinned").valueOrElse(false)
+
+  let nftAsset = tryGetAssetInfo(nftId, "NFT not found")
+  let isDaoStaker = match(getString(DAOAddress, "all_staked_addresses")) {
+    case s:String => isDefined(s.indexOf(i.caller.toString()))
+    case _ => false
+  }
+
+  if (sellerStr.size() == 0) then throw("Seller not found")
+  else if (!isPinned) then throw("NFT not pinned")
+  else if (sellerStr != i.originCaller.toString()) then throw("You are not a seller")
+  else {
+    [
+      DeleteEntry("nft_" + nftAsset.id.toBase58String() + "_pinned"),
+      DeleteEntry("nft_" + nftAsset.id.toBase58String() + "_pinnedHeight")
+    ]
+  }
 }
 
 @Callable(i)
@@ -441,6 +510,8 @@ func acceptBid(nftId: String, betId: String) = {
             DeleteEntry("nft_" + nftId + "_royaltyReceiver"),
             DeleteEntry("nft_" + nftId + "_sellerComment"),
             DeleteEntry("nft_" + nftId + "_seller"),
+            DeleteEntry("nft_" + nftId + "_pinned"),
+            DeleteEntry("nft_" + nftId + "_pinnedHeight"),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId),
             DeleteEntry("address_" + sellerStr + "_nft_" + nftId + "_startSaleAt"),
             DeleteEntry(auctionKey)

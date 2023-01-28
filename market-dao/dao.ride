@@ -90,6 +90,17 @@ func removeItemFromStateArray(dataKey: String, item: String) = {
   }
 }
 
+func removeItemFromStr(dataKey: String, item: String) = {
+  let allData = getString(dataKey).valueOrErrorMessage("Data for key: '" + dataKey + "' not found")
+  if (isDefined(allData.indexOf(item))) then {
+    let dataList = allData.split_51C(",")
+    let itemIndex = dataList.indexOf(item).value()
+    dataList.removeByIndex(itemIndex).makeString_11C(",")
+  } else {
+    allData
+  }
+}
+
 @Callable(i)
 func stake(debug: Boolean) = {
   let addressStr = i.caller.toString()
@@ -443,7 +454,7 @@ func fillTreasuary() = {
     if (finalVotingCandidates.size() == 0) then throw("Canditates list is empty")
     else {
       let finalVotingCandidatesList = finalVotingCandidates.split(",")
-      func processVote(accum: (Int, List[String], List[BooleanEntry], List[StringEntry]), next: String) = {
+      func processVote(accum: (Int, List[String], List[BooleanEntry], String), next: String) = {
         let voteId = next
         let voteUpPowerKey = "vote_" + voteId + "_upPower"
         let voteDownPowerKey = "vote_" + voteId + "_downPower"
@@ -463,7 +474,7 @@ func fillTreasuary() = {
             accum._1,
             accum._2,
             accum._3,
-            removeItemFromStateArray(finalVotingCandidatesKey, voteId)
+            removeItemFromStr(accum._4, voteId)
           )
         }
         else {
@@ -476,15 +487,15 @@ func fillTreasuary() = {
             accum._1 + voteTotalPower,
             accum._2 :+ voteId,
             accum._3 :+ finalVoteState,
-            removeItemFromStateArray(finalVotingCandidatesKey, voteId)
+            removeItemFromStr(accum._4, voteId)
           )
         }
       }
-      let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, [], [], []), processVote)
+      let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, [], [], finalVotingCandidates), processVote)
       let allEndVotesPower = resultTuple._1
       let finalVotesList = resultTuple._2
       let finalVotesState = resultTuple._3
-      let updatedListFinalCanditates = resultTuple._4
+      let updatedListFinalCanditatesStr = resultTuple._4
 
       if (allEndVotesPower == 0) then throw("No power after process canditates")
       else {
@@ -505,8 +516,10 @@ func fillTreasuary() = {
           IntegerEntry(treasuaryAssetIdTotalKey, treasuaryAssetIdTotal + amount),
           IntegerEntry(treasuaryAssetIdAvailableKey, treasuaryAssetIdAvailable + amount),
 
+          StringEntry(finalVotingCandidatesKey, updatedListFinalCanditatesStr),
+
           IntegerEntry(currentRewordsRoundKey, currentRewordsRound + 1)
-        ] ++ finalVotesState ++ updatedListFinalCanditates
+        ] ++ finalVotesState
       }
     }
   }
