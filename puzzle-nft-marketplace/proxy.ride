@@ -256,10 +256,21 @@ func buy(nftId: String) = {
         case s:String => s
         case _ => throw("Somthing wrong when unlock NFT in address: " + wrapAddress.value().bytes.toBase58String())
       }
+
       # is wrapped, unlock and send
-      [
-        ScriptTransfer(i.caller, 1, unlockedNftStr.fromBase58String())
-      ]
+      if wrapAddress.value().bytes == nftWavesDomainsWrapper then {
+        strict transferWavesDomainsTokenWithOwnership = invoke(
+          wrapAddress.value(), 
+          "transfer", 
+          [i.caller.toString()], 
+          [AttachedPayment(unlockedNftStr.fromBase58String(), 1)]
+        )
+
+        []
+      } else
+        [
+          ScriptTransfer(i.caller, 1, unlockedNftStr.fromBase58String())
+        ]
     } else {
       # is not wrapped, just send
       [

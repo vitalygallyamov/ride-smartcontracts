@@ -15,6 +15,7 @@ let adminAddress = Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD')
 # wrapper contracts
 let nftDuckWrapper = base58'3P3pDosq4GCwfJkvq4yqKvvoTwmoqc9qPmo'
 let nftSignArtWrapper = base58'3PPgeYTWMRZ7S7jSLpnVuKKB9r6XuDk3ndC'
+let nftWavesDomainsWrapper = base58'3P6EXY5LjsD8xth9GHemxemFHqCL4QzJSaU'
 
 let duckFeeAddress = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
 
@@ -492,14 +493,32 @@ func acceptBid(nftId: String, betId: String) = {
         let marketFee = fraction(betAmount, 1, 100)
         let DAOFee = fraction(betAmount, 2, 100)
 
+        # use `strict` because `proxy.unlock` erases data entries
+        strict isWavesDomainsWrappedToken = 
+          Address(nftWavesDomainsWrapper).getString("Wrapped_" + nftId + "tokenId").isDefined()
+
         strict unlockedNftStr = match invoke(Address(proxyDappAddress), "unlock", [], [AttachedPayment(nftId.fromBase58String(), 1)]) {
           case s:String => s
           case _ => throw("Somthing wrong when unlock NFT in address: " + proxyDappAddress.toBase58String())
         }
 
         if (bets.containsElement(betId) && betAmount > 0) then {
-          [
-            ScriptTransfer(Address(betOwner.fromBase58String()), 1, unlockedNftStr.fromBase58String()),
+          let transferUnlockedNft = 
+            if isWavesDomainsWrappedToken then {
+              strict transferWavesDomainsTokenWithOwnership = invoke(
+                Address(nftWavesDomainsWrapper), 
+                "transfer", 
+                [betOwner], 
+                [AttachedPayment(unlockedNftStr.fromBase58String(), 1)]
+              )
+
+              []
+            } else
+              [
+                ScriptTransfer(Address(betOwner.fromBase58String()), 1, unlockedNftStr.fromBase58String())
+              ]
+
+          transferUnlockedNft ++ [
             ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee - DAOFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),

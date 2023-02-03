@@ -109,6 +109,16 @@ func unlock() = {
 }
 
 
+# Transfer token with ownership of the name
+@Callable(inv)
+func transfer(recipient: String) = {
+    strict transferWithOwnership = 
+        wavesRegistryAddress.invoke("transfer", [recipient], inv.payments)
+    
+    []
+}
+
+
 @Verifier(tx)
 func verify() = {
     let maybeOracle = this.getString("Oracle").valueOrElse("").addressFromString()
