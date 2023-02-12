@@ -90,14 +90,13 @@ func removeItemFromStateArray(dataKey: String, item: String) = {
   }
 }
 
-func removeItemFromStr(dataKey: String, item: String) = {
-  let allData = getString(dataKey).valueOrErrorMessage("Data for key: '" + dataKey + "' not found")
-  if (isDefined(allData.indexOf(item))) then {
-    let dataList = allData.split_51C(",")
+func removeItemFromStr(str: String, item: String) = {
+  if (isDefined(str.indexOf(item))) then {
+    let dataList = str.split_51C(",")
     let itemIndex = dataList.indexOf(item).value()
     dataList.removeByIndex(itemIndex).makeString_11C(",")
   } else {
-    allData
+    str
   }
 }
 
@@ -453,12 +452,16 @@ func fillTreasuary() = {
     let finalVotingCandidates = getString(finalVotingCandidatesKey).valueOrElse("")
     if (finalVotingCandidates.size() == 0) then throw("Canditates list is empty")
     else {
-      let finalVotingCandidatesList = finalVotingCandidates.split(",")
       func processVote(accum: (Int, List[String], List[BooleanEntry], String), next: String) = {
         let voteId = next
         let voteUpPowerKey = "vote_" + voteId + "_upPower"
         let voteDownPowerKey = "vote_" + voteId + "_downPower"
         let voteTotalPowerKey = "vote_" + voteId + "_totalPower"
+
+        let voteExist = match(getString("vote_" + voteId + "_collectionId")) {
+          case s:String => s.size() > 0
+          case _ => false
+        }
 
         let voteUpPower = getInteger(voteUpPowerKey).valueOrElse(0)
         let voteDownPower = getInteger(voteDownPowerKey).valueOrElse(0)
@@ -469,7 +472,7 @@ func fillTreasuary() = {
         if (voteTotalPower == 0) then throw("Invalid total power")
         else if (voteTotalPower < quorumLimit) then throw("Power less than limit")
         else if (voteUpPower + voteDownPower == 0) then throw("Invalid up, down power")
-        else if (isVotingClosed(voteId)) then {
+        else if (!voteExist || isVotingClosed(voteId)) then {
           (
             accum._1,
             accum._2,
@@ -491,6 +494,7 @@ func fillTreasuary() = {
           )
         }
       }
+      let finalVotingCandidatesList = finalVotingCandidates.split(",")
       let resultTuple = FOLD<10>(finalVotingCandidatesList, (0, [], [], finalVotingCandidates), processVote)
       let allEndVotesPower = resultTuple._1
       let finalVotesList = resultTuple._2

@@ -9,7 +9,7 @@ let signArtIssuerAddress = Address(base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV')
 let createNFTAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 let ultraStakingAddress = Address(base58'3PKUxbZaSYfsR7wu2HaAgiirHYwAMupDrYW')
 let marketFeeAddress = Address(base58'3PKvcEmyHvo2PRsKhpKrDjmSNmnsuHn3UBR')
-let DAOAddress = Address(base58'3P975LUuqc7uBPiSxp3nemf2FZh62zfirSh')
+let DAOBankAddress = Address(base58'3PNDf51CQWHCRVMhLrbyid8zv8Uea6nVeAx')
 
 func checkNFTValidity(assetId: ByteVector) = match getString(Address(base58'3P7FFQkgALLZDJpCf3smY517wjgPMswGoRP'), (("art_" + toBase58String(assetId)) + "_type")) {
     case x: String => 5
@@ -192,7 +192,7 @@ func unlock() = {
       let DAOFee = fraction(nftReward, 2, 100)
       [
         ScriptTransfer(marketFeeAddress, marketFee, usdnAssetId),
-        ScriptTransfer(DAOAddress, DAOFee, usdnAssetId),
+        ScriptTransfer(DAOBankAddress, DAOFee, usdnAssetId),
         ScriptTransfer(Address(ownerAddress.fromBase58String()), nftReward - marketFee - DAOFee, usdnAssetId)
       ]
     } else []

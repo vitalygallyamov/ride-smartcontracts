@@ -7,6 +7,7 @@ let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
 let createNftDapp = base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By'
 let marketFeeAddress = Address(base58'3PKvcEmyHvo2PRsKhpKrDjmSNmnsuHn3UBR')
 let DAOAddress = Address(base58'3P975LUuqc7uBPiSxp3nemf2FZh62zfirSh')
+let DAOBankAddress = Address(base58'3PNDf51CQWHCRVMhLrbyid8zv8Uea6nVeAx')
 let puzzleStakeAddress = base58'3PFTbywqxtFfukX3HyT881g4iW5K4QL3FAS'
 let proxyDappAddress = base58'3P6fAxtw12pjFhayEfpcUWxgu2BHVCeP78A'
 
@@ -179,7 +180,7 @@ func buyNFT(nftId: String) = {
         ScriptTransfer(Address(sellerStr.fromBase58String()), buyOutPrice - royaltyPart - marketFee - DAOFee, buyOutAssetId),
         ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, buyOutAssetId),
         ScriptTransfer(marketFeeAddress, marketFee, buyOutAssetId),
-        ScriptTransfer(DAOAddress, DAOFee, buyOutAssetId)
+        ScriptTransfer(DAOBankAddress, DAOFee, buyOutAssetId)
       ]
     }
 
@@ -288,7 +289,7 @@ func pin(nftId: String) = {
         let half = fraction(i.payments[0].amount, 1, 2)
         [
           ScriptTransfer(marketFeeAddress, half, USDTAssetId),
-          ScriptTransfer(DAOAddress, i.payments[0].amount - half, USDTAssetId)
+          ScriptTransfer(DAOBankAddress, i.payments[0].amount - half, USDTAssetId)
         ]
       }
     [
@@ -522,7 +523,7 @@ func acceptBid(nftId: String, betId: String) = {
             ScriptTransfer(i.caller, betAmount - royaltyPart - marketFee - DAOFee, betAssetId),
             ScriptTransfer(Address(royaltyReceiver.fromBase58String()), royaltyPart, betAssetId),
             ScriptTransfer(marketFeeAddress, marketFee, betAssetId),
-            ScriptTransfer(DAOAddress, DAOFee, betAssetId),
+            ScriptTransfer(DAOBankAddress, DAOFee, betAssetId),
 
             DeleteEntry("nft_" + nftId + "_buyOutPrice"),
             DeleteEntry("nft_" + nftId + "_buyOutAssetId"),
