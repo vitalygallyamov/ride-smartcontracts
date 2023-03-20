@@ -6,6 +6,7 @@ let creationAddress = Address(base58'3PFQjjDMiZKQZdu5JqTHD7HwgSXyp9Rw9By')
 let signArtIssuerAddress = Address(base58'3PDBLdsUrcsiPxNbt8g2gQVoefKgzt3kJzV')
 
 let USDTAssetId = base58'34N9YcEETLWn93qYQ64EsP1x89tSruJU44RrEMSXXEPJ'
+let PUZZLEAssetId = base58'HEB8Qaw9xrWpWs8tHsiATYGBWDBtP2S7kcPALrMu43AS'
 
 # global keys
 let totalStakedKey = "total_staked"
@@ -444,7 +445,7 @@ func unvoteByNFT(voteId: String, assets: String) = {
 func fillTreasuary() = {
   if (i.payments.size() == 0) then throw("No payment")
   else if (i.payments[0].amount == 0) then throw("Payment must be more 0")
-  else if (i.payments[0].assetId != USDTAssetId) then throw("Payment must be in USDT")
+  else if (i.payments[0].assetId != USDTAssetId && i.payments[0].assetId != PUZZLEAssetId) then throw("Payment must be in USDT or Puzzle")
   else {
     let amount = i.payments[0].amount
     let assetId = i.payments[0].assetId.value()
