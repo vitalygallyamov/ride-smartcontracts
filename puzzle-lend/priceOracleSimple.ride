@@ -4,18 +4,13 @@
 
 let lastUpdatedBlockKey = "lastUpdatedBlock"
 
-let whiteListAddresses = [
-    Address(base58'3PJKmXoHJvVeQXjSJdhtkUcFDtdiQqMbUTD'),
-    Address(base58'3PL4D6MhfMqrSr1d932EMTavcsQN9P9DcUU')
-]
-
 let wcapPubKey = base58'FcWW78jEZvLXMVC84C4KpMVKSVvjgSvhAe2XUEQYBKuu'
 
 let n15List = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 let n60List = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 
-func getPriceDataKey(block: Int, type: String, tokenId: String) = {
-    "block_" + block.toString() + "_" + type + "_" + tokenId
+func getPriceDataKey(block: Int, tokenId: String) = {
+    "block_" + block.toString() + "_" + tokenId
 }
 
 func getLastUpdatedBlock() = {
@@ -27,148 +22,79 @@ func getLastUpdatedBlock() = {
 
 # Find price by type and block number
 # type: tokenId - Asset Id
-# type: type - Type of price value (minPrce, maxPrice)
 # type: block - Block number
-func getPriceValue(tokenId: String, type: String, block: Int) = {
-    getInteger(getPriceDataKey(block, type, tokenId)).valueOrElse(0)
+func getPriceValue(tokenId: String, block: Int) = {
+    getInteger(getPriceDataKey(block, tokenId)).valueOrElse(0)
 }
 
-# func getPriceDataEntries(priceList: List[String], height: Int) = {
-#   func processList(accum: List[IntegerEntry], next: String) = {
-#     let parsed = next.split("_")
-#     # parsed[0] - tokenID
-#     # parsed[1] - price
-#     let tokenId = parsed[0]
-#     let newPrice = parseInt(parsed[1]).valueOrErrorMessage("Invalid value parsed price")
-
-#     let keyMinPrice = getPriceDataKey(height, "min", tokenId)
-#     let keyMaxPrice = getPriceDataKey(height, "max", tokenId)
-
-#     let currentMinPrice = getInteger(keyMinPrice).valueOrElse(0)
-#     let currentMaxPrice = getInteger(keyMaxPrice).valueOrElse(0)
-
-#     if (newPrice <= 0) then throw("Price cannot be zero or less zero")
-#     else if (tokenId.size() == 0) then throw("Inavalid value token Id")
-#     else if (currentMaxPrice == 0 && currentMinPrice == 0) then {
-#         accum ++ [IntegerEntry(keyMinPrice, newPrice), IntegerEntry(keyMaxPrice, newPrice)]
-#     } else if (newPrice < currentMinPrice) then {
-#       accum :+ IntegerEntry(keyMinPrice, newPrice)
-#     } else if (newPrice > currentMaxPrice) then {
-#       accum :+ IntegerEntry(keyMaxPrice, newPrice)
-#     } else {
-#       accum
-#     }
-#   }
-
-#   FOLD<100>(priceList, [], processList)
-# }
-
-# price list item format: token_price
-# @Callable(i)
-# func updatePrice(prices: List[String]) = {
-#   if (whiteListAddresses.indexOf(i.caller) == unit) then throw("Access denied")
-#   else if (prices.size() == 0) then throw("Price list is empty")
-#   else {
-#     [
-#       IntegerEntry(lastUpdatedBlockKey, height)
-#     ] 
-#     ++ getPriceDataEntries(prices, height)
-#   }
-# }
-
 # for loop get prices
-func getPriceList(accum: (List[Int], Int, String, String, Int), next: Int) = {
-  let (result, block, tokenId, type, sum) = accum
-  let priceValue = getPriceValue(tokenId, type, block)
+func getPriceList(accum: (List[Int], Int, String, Int), next: Int) = {
+  let (result, block, tokenId, sum) = accum
+  let priceValue = getPriceValue(tokenId, block)
   let nextBlock = block - next
 
   if (priceValue > 0) then {
-      (result :+ priceValue, nextBlock, tokenId, type, sum + priceValue)
-  } else (result, nextBlock, tokenId, type, sum)
+      (result :+ priceValue, nextBlock, tokenId, sum + priceValue)
+  } else (result, nextBlock, tokenId, sum)
 }
 
 @Callable(i)
 func getPrice(tokenId: String, debug: Boolean) = {
   # todo: add pools value
   let lastUpdatedBlock = getLastUpdatedBlock()
+  let price = getPriceValue(tokenId, lastUpdatedBlock)
   if (debug) then
-    throw("min: " + getPriceValue(tokenId, "min", lastUpdatedBlock).toString() + ", max: " +getPriceValue(tokenId, "max", lastUpdatedBlock).toString())
+    throw("price: " + price.toString())
   else
-    ([], (getPriceValue(tokenId, "min", lastUpdatedBlock), getPriceValue(tokenId, "max", lastUpdatedBlock)))
+    ([], (price, price))
 }
 
 @Callable(i)
 func getPriceAt(block: Int, tokenId: String, debug: Boolean) = {
   # todo: add pools value
+  let price = getPriceValue(tokenId, block)
   if (debug) then
-    throw("min: " + getPriceValue(tokenId, "min", block).toString() + ", max: " +getPriceValue(tokenId, "max", block).toString())
+    throw("price: " + price.toString())
   else
-    ([], (getPriceValue(tokenId, "min", block), getPriceValue(tokenId, "max", block)))
+    ([], (price, price))
 }
 
 @Callable(i)
 func getTWAP60(tokenId: String, debug: Boolean) = {
   let lastUpdatedBlock = getLastUpdatedBlock()
 
-  let minTuple = (FOLD<60>(n60List, ([], lastUpdatedBlock, tokenId, "min", 0), getPriceList))
-  let maxTuple = (FOLD<60>(n60List, ([], lastUpdatedBlock, tokenId, "max", 0), getPriceList))
+  # get list prices for 60 blocks
+  let tuple = (FOLD<60>(n60List, ([], lastUpdatedBlock, tokenId, 0), getPriceList))
+  let pricesList = tuple._1
+  let sum = tuple._4
+  let average = fraction(sum, 1_000_000, fraction(pricesList.size(), 1_000_000, 1))
 
-  # calc min max sum prices
-  # func sum(accum: Int, next: Int) = accum + next
-  # let minSum = FOLD<60>(minPricesList, 0, sum)
-  # let maxSum = FOLD<60>(maxPricesList, 0, sum)
-  let minPricesList = minTuple._1
-  let maxPricesList = maxTuple._1
-
-  let minSum = minTuple._5
-  let maxSum = maxTuple._5
-
-  # calc min max average
-  let minAverage = fraction(minSum, 1_000_000, fraction(minPricesList.size(), 1_000_000, 1))
-  let maxAverage = fraction(maxSum, 1_000_000, fraction(maxPricesList.size(), 1_000_000, 1))
+  let isLocked = getBoolean(tokenId + "_locked").valueOrElse(false)
 
   if (debug) then
-    throw("minAv: " + minAverage.toString() +
-    ", maxAv: " + maxAverage.toString() +
-    ", minPriceListSize: " + minPricesList.size().toString() +
-    ", maxPriceListSize: " + maxPricesList.size().toString() +
-    ", minSum: " + minSum.toString() +
-    ", maxSum: " + maxSum.toString())
+    throw("average: " + average.toString() + ", priceListSize: " + pricesList.size().toString() + ", sum: " + sum.toString())
+  else if (isLocked) then throw("Token: " + tokenId + " locked")
   else
-    ([], (minAverage, maxAverage))
+    ([], (average, average))
 }
 
 @Callable(i)
 func getTWAP15(tokenId: String, debug: Boolean) = {
   let lastUpdatedBlock = getLastUpdatedBlock()
 
-  # get list max and min prices for 15 blocks
-  let minTuple = (FOLD<15>(n15List, ([], lastUpdatedBlock, tokenId, "min", 0), getPriceList))
-  let maxTuple = (FOLD<15>(n15List, ([], lastUpdatedBlock, tokenId, "max", 0), getPriceList))
+  # get list prices for 15 blocks
+  let tuple = (FOLD<15>(n15List, ([], lastUpdatedBlock, tokenId, 0), getPriceList))
+  let pricesList = tuple._1
+  let sum = tuple._4
+  let average = fraction(sum, 1_000_000, fraction(pricesList.size(), 1_000_000, 1))
 
-  # calc min max sum prices
-  # func sum(accum: Int, next: Int) = accum + next
-  # let minSum = FOLD<15>(minPricesList, 0, sum)
-  # let maxSum = FOLD<15>(maxPricesList, 0, sum)
-  let minPricesList = minTuple._1
-  let maxPricesList = maxTuple._1
-
-  let minSum = minTuple._5
-  let maxSum = maxTuple._5
-
-  # calc min max average
-  let minAverage = fraction(minSum, 1_000_000, fraction(minPricesList.size(), 1_000_000, 1))
-  let maxAverage = fraction(maxSum, 1_000_000, fraction(maxPricesList.size(), 1_000_000, 1))
+  let isLocked = getBoolean(tokenId + "_locked").valueOrElse(false)
 
   if (debug) then
-    throw("minAv: " + minAverage.toString() +
-    ", maxAv: " + maxAverage.toString() +
-    ", minPriceListSize: " + minPricesList.size().toString() +
-    ", maxPriceListSize: " + maxPricesList.size().toString() +
-    ", minSum: " + minSum.toString() +
-    ", maxSum: " + maxSum.toString())
+    throw("average: " + average.toString() + ", priceListSize: " + pricesList.size().toString() + ", sum: " + sum.toString())
+  else if (isLocked) then throw("Token: " + tokenId + " locked")
   else
-    ([], (minAverage, maxAverage))
+    ([], (average, average))
 }
 
 @Verifier(tx)
@@ -182,14 +108,19 @@ func verify() = {
         case _ => throw("Only integer data entries update via verifier")
       }
     }
-    dataSize > 1 &&
-    match(dTx.data[0]) {
-      case d:BooleanEntry => d.key == "update_via_verifier" && d.value
-      case _ => throw("invalid first key")
-    } &&
-    checkItem(dTx.data[1]) && 
-    if (dataSize == 3) then checkItem(dTx.data[2]) else true &&
-    if (dataSize == 4) then checkItem(dTx.data[3]) else true
+    if (dataSize > 1) then {
+      let isPriceUpdate = match(dTx.data[0]) {
+        case d:BooleanEntry => d.key == "update_via_verifier" && d.value
+        case _ => false
+      }
+      let isLockUpdate = match(dTx.data[0]) {
+        case d:BooleanEntry => d.key == "update_via_locker" && d.value
+        case _ => false
+      }
+      if (isPriceUpdate) then {
+        checkItem(dTx.data[1])
+      } else isLockUpdate
+    } else false
   }
 
   match (tx) {
@@ -202,6 +133,3 @@ func verify() = {
     case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
   }
 }
-
-# @Verifier(tx)
-# func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
